@@ -103,8 +103,9 @@ Completed slices:
 
 - **3A — PGN position retrieval:** parse one PGN, reconstruct its main line, and retrieve the exact position after a requested number of plies.
 - **3B — One-move engine comparison:** compare a played move with a Stockfish candidate using a fixed-node, paired MultiPV search and retain explicit centipawn or mate evaluations.
+- **3C — Rank player moves:** replay one game, compare the selected color's moves, and return comparisons in descending evaluation-loss order. Ties retain game order.
 
-The next slice is **3C — Rank player moves:** walk one game, compare only the selected player's moves, and rank raw evaluation-loss candidates for later human and product review.
+The next slice is **the first training card:** review the ranked candidates, select one useful position, and build a small exercise around its position and better move. The highest engine loss is not automatically the best teaching position.
 
 These slices remain domain-level Python code. No web framework, database, server, training-label thresholds, or AI coaching layer has been added yet.
 
@@ -117,3 +118,64 @@ Stockfish 19 characterization for the position before `16.Ne5` on 2026-09-09:
 | 500,000 | `Bxf7+` | +802 cp | +773 cp | 29 cp |
 
 These are environment-specific observations, not stable expected values or training labels.
+
+### Running the game-wide analysis experiment
+
+`analyze_player_moves(engine, game, player_color, *, nodes=100_000)` returns a
+`list[MoveComparison]`. Select the player with `chess.WHITE` or `chess.BLACK`.
+The node budget applies to each search, not the entire game: a comparison uses
+one seed search and, when necessary, one paired search. The same engine process
+is reused across the game. Empty games or games with no moves for the selected
+color return an empty list. Non-positive budgets raise `ValueError`, even for
+empty games. Analysis errors propagate without returning a partial ranking.
+
+Run this manual experiment from the project root using the existing test PGN:
+
+```bash
+.venv/bin/python - <<'PY'
+import runpy
+import chess
+import chess.engine
+from chess_coach.analysis import analyze_player_moves
+from chess_coach.pgn import parse_pgn
+
+pgn = runpy.run_path("tests/test_pgn.py")["CHESS_COM_PGN"]
+game = parse_pgn(pgn)
+engine = chess.engine.SimpleEngine.popen_uci("stockfish")
+try:
+    ranked = analyze_player_moves(engine, game, chess.WHITE, nodes=100_000)
+finally:
+    engine.quit()
+
+for comparison in ranked[:5]:
+    board = chess.Board(comparison.position_fen)
+    print(f"{board.fullmove_number}.{comparison.played_move_san}",
+          f"best={comparison.best_move_san}",
+          f"loss={comparison.evaluation_loss}")
+    print("best evaluation:", comparison.best_evaluation)
+    print("played evaluation:", comparison.played_evaluation)
+PY
+```
+
+`runpy` loads the existing fixture for this manual experiment; production domain
+code does not import tests. The caller starts and closes Stockfish. Keeping
+`quit()` in `finally` ensures cleanup is attempted even if analysis fails.
+The game is left unchanged, and every comparison retains its pre-move FEN.
+
+A Stockfish 19 run on 2026-09-14 analyzed all 20 White moves at 100,000 nodes per
+search in approximately 5.7 seconds. The five highest observed losses were:
+
+| Played move | Paired best move | Best evaluation | Played evaluation | Loss |
+| --- | --- | ---: | ---: | ---: |
+| `14.b3` | `Ne5` | +761 cp | +609 cp | 152 |
+| `16.Ne5` | `Bxf7+` | +751 cp | +642 cp | 109 |
+| `3.f4` | `Nf3` | +33 cp | -51 cp | 84 |
+| `10.cxd5` | `O-O` | +137 cp | +66 cp | 71 |
+| `6.e3` | `e4` | +86 cp | +44 cp | 42 |
+
+These particular losses are centipawn differences. When a mate score is present,
+`evaluation_loss` uses the synthetic ranking values instead and should not be
+displayed as a literal centipawn loss. Scores and rankings can vary with search
+budget and engine history; this process retains its search state between moves.
+The earlier fresh-engine `Ne5` experiment is therefore not an exact-score oracle
+for the game-wide run. These candidates still require human review.

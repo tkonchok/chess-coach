@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 import chess
 import chess.engine
+import chess.pgn
 
 
 MATE_SCORE = 100_000
@@ -170,4 +171,34 @@ def _engine_evaluation(
         centipawns=ranking_value,
         mate_in=None,
         ranking_value=ranking_value,
+    )
+
+
+def analyze_player_moves(
+    engine: chess.engine.SimpleEngine,
+    game: chess.pgn.Game,
+    player_color: chess.Color,
+    *,
+    nodes: int = 100_000,
+) -> list[MoveComparison]:
+    """Rank the player's main-line moves by loss, keeping game order for ties.
+
+    The positive node budget applies to each seed/paired search, not the whole
+    game. The caller owns the engine and must close it. Engine failures propagate
+    to the caller; no partial ranking is returned. The game is left unchanged.
+    """
+    if nodes <= 0:
+        raise ValueError("nodes must be greater than zero")
+
+    board = game.board()
+    results = []
+
+    for move in game.mainline_moves():
+        if board.turn == player_color:
+            comparison = compare_move(engine, board, move, nodes=nodes)
+            results.append(comparison)
+
+        board.push(move)
+    return sorted(
+        results, key=lambda comparison: comparison.evaluation_loss, reverse=True
     )
