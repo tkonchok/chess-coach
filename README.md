@@ -6,9 +6,11 @@ The long-term goal is to help players understand recurring weaknesses in their p
 
 ## Project Status
 
-Early development.
-
-The project is currently focused on building the smallest reliable end-to-end training workflow before expanding features.
+Local prototype. PGN analysis, explicit editorial review, offline practice pages,
+and bounded Chess.com username import now work through command-line tools.
+The browser-only workflow, board move entry, durable reflections, and deployment
+are not implemented yet. See the [roadmap](docs/ROADMAP.md) and
+[validation log](docs/VALIDATION.md) for completed work and remaining gates.
 
 ## V1 Product Hypothesis
 
@@ -18,13 +20,17 @@ A self-taught intermediate chess player will find training more useful when impo
 
 The initial version will focus on:
 
-- completed Chess.com rapid games
+- username import of completed, rated, standard Chess.com rapid games, with PGN fallback
+- factual recent-game activity and rating summaries with coverage warnings
 - exact positions from the player's own games
 - identifying meaningful mistakes, misses, and important decisions
-- allowing the player to attempt a better move before seeing the answer
-- concise explanations of why a stronger move works
-- optional deeper coaching and reflection
-- remembering training history and recurring weaknesses over time
+- practicing by playing on the board before revealing a reviewed example
+- concise explanations, including alternative strong moves and uncertainty
+- saved practice history and reflections
+
+Conversational coaching, learner memory, and history-guided recommendations follow
+the first private deployment. The current practice page still uses text move entry.
+Its examples are not automatic right/wrong grading.
 
 ## Not in V1
 
@@ -65,7 +71,10 @@ Current decisions:
 - heavy chess analysis performed outside the browser
 - core chess/training logic should remain independent enough to support other interfaces in the future
 
-Frameworks, database technology, production chess-engine packaging, frontend stack, AI models, and deployment providers have not yet been finalized. Stockfish is currently used only as a local analysis experiment.
+Frameworks, database technology, production chess-engine packaging, frontend stack,
+AI models, and deployment providers have not yet been finalized. Stockfish runs
+locally; command adapters and disposable JSON artifacts do not introduce a server
+or database. The only Python dependency remains `chess==1.11.2`.
 
 ## Local Development
 
@@ -91,6 +100,153 @@ python -m unittest discover -s tests -v
 
 The `chess` Python package and Stockfish use GPL licenses. Licensing must be reviewed before distributing the application.
 
+### Try the local practice page
+
+From the project root, generate the first card:
+
+```bash
+.venv/bin/python -m examples.first_card
+```
+
+Open `generated/first-card.html` in your browser. On macOS you can use:
+
+```bash
+open generated/first-card.html
+```
+
+Study the board, type your proposed move and reasoning, then select **Reveal
+example**. Use **Previous** and **Next** to step through the continuation.
+**Return to starting position** hides the example and resets the board while
+keeping your typed notes. The board is a viewer; moves are entered as text,
+not by dragging pieces. Answers are not graded, saved, or sent anywhere.
+
+The file works offline with inline SVG boards, CSS, and JavaScript. Stockfish
+is not needed to generate this already-reviewed example. There is no web
+framework or server. Re-running the command replaces the generated page;
+`generated/` is ignored by Git. The shared sample PGN lives in `examples/game.pgn`.
+
+The implementation has three small parts: `training.py` holds the card data,
+`presentation.py` renders each legal board position, and `templates/card.html`
+controls presentation and navigation. The example generator connects them.
+
+### Analyze and review another game
+
+No application-code changes are required. From the project root:
+
+```bash
+.venv/bin/python -m chess_coach analyze examples/game.pgn --color white --output generated/analysis.json
+.venv/bin/python -m chess_coach review generated/analysis.json examples/first-review.json --output generated/reviewed-card
+open generated/reviewed-card/card.html
+```
+
+`analyze` prints ranked candidates and saves the source PGN, its SHA-256 document
+ID, headers, selected color, exact ply/FEN/move, evaluations, engine identity,
+library version, settings, and timestamp. A ply is one move by one side; ply 30
+means the board before White's 16th move in a normal game. Losses involving mate
+use synthetic ranking values, not literal centipawns.
+
+To use your own game, change the PGN path and color, inspect the candidates, and
+supply an editorial JSON file modeled on `examples/first-review.json`. Read the
+[review checklist](docs/TRAINING_REVIEW.md). Acceptance requires a reason, legal
+SAN continuation, explanation, and notes about alternatives. Rejection requires a
+reason but produces no HTML. Leaving all candidates unaccepted is also valid.
+
+The report is input to `review`; don't edit its source or candidate position.
+`review` checks source integrity and replay, then saves a versioned snapshot in
+`review.json` beside the HTML. Digest IDs detect accidental changes, not malicious
+tampering. A document ID is not a universal game identity: reformatting a PGN
+changes that ID. Imported games additionally retain a stable source-URL ID.
+
+Try the same workflow for Black using a deliberately synthetic second game:
+
+```bash
+.venv/bin/python -m chess_coach analyze examples/second-game.pgn --color black --output generated/second-analysis.json
+.venv/bin/python -m chess_coach review generated/second-analysis.json examples/second-review.json --output generated/second-card
+```
+
+Output paths must be new: these commands refuse to overwrite previous reports or
+cards. Use another name when rerunning. Generated outputs are ignored by Git.
+
+### Import from Chess.com
+
+```bash
+.venv/bin/python -m chess_coach import-games YOUR_USERNAME --output generated/history.json
+```
+
+The command fetches public data, not account credentials. It selects the newest
+100 eligible games within 90 days, identifies color, and prints results, activity,
+reported rapid rating/date, sample coverage, truncation, and missing-data warnings.
+The JSON also contains daily activity and observed per-game rating history. The
+starred five-game suggestion uses recency regardless of wins/draws/losses; it does
+not diagnose weaknesses or claim these are optimal training games.
+
+Choose any game's displayed ID prefix, not just a starred game:
+
+```bash
+.venv/bin/python -m chess_coach analyze-import generated/history.json --game GAME_ID_PREFIX --output generated/imported-analysis.json
+```
+
+Then use the same `review` command with your reviewed decision. Analyze selected
+games one at a time in this command workflow; there is not yet a background queue.
+
+To refresh explicitly, choose a new output snapshot:
+
+```bash
+.venv/bin/python -m chess_coach import-games YOUR_USERNAME --refresh --output generated/history-refreshed.json
+```
+
+Requests are serial, capped at seven per import, with a 15-second socket timeout
+and 10 MB response limit. Only relevant archive months are fetched. Disposable
+cache entries live in `generated/import-cache`, obey freshness directives, and
+use ETag revalidation. A cache with zero freshness still needs the network.
+Refresh cannot force Chess.com's own data to be current. Rate limits are reported
+without automatic retry; monthly failures explicitly mark partial coverage.
+Game URLs provide deduplication within each snapshot and stable IDs across refreshes.
+Durable cross-session merging/history is milestone 7, not this cache.
+
+The endpoint contracts and rating meanings come from the
+[official Chess.com Public Data API documentation](https://www.chess.com/news/view/published-data-api).
+Data from the statistics endpoint is separate from the imported sample: do not
+interpret 100 games as a complete 90-day history or calculate an undefined
+“time at this rating” measure from it.
+
+On this Mac, Python's default certificate file was missing. A verified local
+workaround uses the existing system CA bundle for this command only:
+
+```bash
+SSL_CERT_FILE=/etc/ssl/cert.pem .venv/bin/python -m chess_coach import-games YOUR_USERNAME --output generated/history.json
+```
+
+Use a valid trust store appropriate to your environment; never disable TLS
+verification. No certificate dependency or global setting was changed.
+
+### Limits and verification
+
+The command workflow accepts at most 1 MB PGNs and 1,000 main-line plies, and
+currently requires standard chess from the normal starting position. Analysis
+uses one Stockfish process, one thread, and 16 MiB hash. Defaults are 100,000 nodes
+per search and a 120-second shared analysis deadline; use `--nodes` and `--seconds`
+to change them within the documented command limits. Searches have a maximum
+30-second response timeout. Startup/shutdown have separate bounds. Failures do
+not produce partial candidate reports, and cleanup is attempted in `finally`.
+These are local command safeguards, not a production resource-isolation system.
+
+```bash
+.venv/bin/python -m unittest discover -s tests -v
+RUN_STOCKFISH_TESTS=1 .venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python -m pip check
+```
+
+The default suite is network-free and skips the real-engine integration test.
+The opt-in suite needs `stockfish` on PATH and runs both example games through
+analysis, review, and legal card replay without asserting exact scores. Browser
+interactions still have manual smoke coverage, not an automated browser suite.
+
+New code boundaries: `workflow.py` connects chess analysis to editorial review;
+`chesscom.py` imports and summarizes public data; `__main__.py` handles arguments,
+files, and engine lifetime. Core comparison and card-building functions remain
+independent of the eventual web framework.
+
 ## Current Milestone
 
 ### Milestone 3 — One End-to-End Training Card
@@ -105,13 +261,18 @@ Completed slices:
 - **3B — One-move engine comparison:** compare a played move with a Stockfish candidate using a fixed-node, paired MultiPV search and retain explicit centipawn or mate evaluations.
 - **3C — Rank player moves:** replay one game, compare the selected color's moves, and return comparisons in descending evaluation-loss order. Ties retain game order.
 - **3D — First card data:** build a practice-and-reveal card from an explicitly selected position, preserving its FEN, actual played move, reviewed example continuation, and explanation. Each continuation move is checked for legality.
+- **3E — Local practice page:** view the first card in a browser, enter a move and reasoning, reveal an example, and step through its positions without a server.
 
-The next slice is **trying the card through an interface:** display the position,
-let the player consider a move and their reasoning, then reveal the example.
-The interface technology is still undecided. The highest engine loss is not
+The first manually reviewed card runs through a local browser interface.
+Technical 3F checks are recorded in the validation log; the learner's fresh
+usefulness assessment remains open. Milestone 4's reusable/import workflows now
+exist as command adapters. Milestone 5 has an explicit review checklist, but still
+needs a varied real-game quality assessment. The highest engine loss is not
 automatically the best teaching position.
 
-These slices remain domain-level Python code. No web framework, database, server, training-label thresholds, or AI coaching layer has been added yet.
+No web framework, database, server, training-label thresholds, or AI coaching
+layer has been added. The next web step is to review the screens listed in the
+roadmap before choosing a framework or board library.
 
 Stockfish 19 characterization for the position before `16.Ne5` on 2026-09-09:
 
@@ -195,8 +356,9 @@ positions, and illegal continuation moves raise `ValueError`.
 Selection and explanation are explicit editorial inputs. The builder validates
 legal replay; it does not establish that a move is uniquely best, grade an
 answer, or automatically turn the largest loss into a puzzle. The returned data
-contains the reveal too; a future interface must show the prompt and position
-first and withhold the continuation, actual move, and explanation until reveal.
+contains the reveal too; the browser initially shows only the prompt and position
+and hides the continuation, actual move, and explanation until reveal. This is
+visual hiding for practice: someone inspecting the HTML source can see the answer.
 
 For the first card, we selected the position before `16.Ne5`. A separate
 500,000-node, three-line Stockfish 19 review found several strong options,
@@ -236,5 +398,5 @@ print(card.explanation)
 The full selected line is `16.Bxf7+ Kg7 17.Bxe8 Qxe8`, including Black's
 recapture. On 2026-09-15 a manual end-to-end check confirmed that the card's FEN
 and original move match a result from the game-wide analyzer, and every move in
-the example line replays legally. The automated suite contains 45 tests; it
-does not assert exact engine evaluations.
+the example line replays legally. Automated tests do not assert exact engine
+evaluations; see the current validation commands above.

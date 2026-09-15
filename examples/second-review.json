@@ -1,0 +1,8 @@
+{
+  "decision": "accept",
+  "source_ply_count": 5,
+  "reason": "A synthetic smoke example for Black: look for the opponent's immediate mating threat before developing another piece.",
+  "continuation_san": ["g6", "Qf3", "Nf6"],
+  "explanation": "Before developing, ask what your opponent threatens. White threatens Qxf7 mate. In this example, g6 blocks the queen's path to f7 and attacks the queen. After Qf3 renews the threat, Nf6 blocks that new path. The continuation illustrates threat recognition; it is not forced and g6 is not claimed to be the only defense.",
+  "alternatives": "Qe7 also defends f7 and deserves consideration. Other queen replies after g6 are possible. This invented short game tests the workflow; it is not evidence of this learner's weaknesses."
+}
