@@ -104,8 +104,12 @@ Completed slices:
 - **3A — PGN position retrieval:** parse one PGN, reconstruct its main line, and retrieve the exact position after a requested number of plies.
 - **3B — One-move engine comparison:** compare a played move with a Stockfish candidate using a fixed-node, paired MultiPV search and retain explicit centipawn or mate evaluations.
 - **3C — Rank player moves:** replay one game, compare the selected color's moves, and return comparisons in descending evaluation-loss order. Ties retain game order.
+- **3D — First card data:** build a practice-and-reveal card from an explicitly selected position, preserving its FEN, actual played move, reviewed example continuation, and explanation. Each continuation move is checked for legality.
 
-The next slice is **the first training card:** review the ranked candidates, select one useful position, and build a small exercise around its position and better move. The highest engine loss is not automatically the best teaching position.
+The next slice is **trying the card through an interface:** display the position,
+let the player consider a move and their reasoning, then reveal the example.
+The interface technology is still undecided. The highest engine loss is not
+automatically the best teaching position.
 
 These slices remain domain-level Python code. No web framework, database, server, training-label thresholds, or AI coaching layer has been added yet.
 
@@ -179,3 +183,58 @@ displayed as a literal centipawn loss. Scores and rankings can vary with search
 budget and engine history; this process retains its search state between moves.
 The earlier fresh-engine `Ne5` experiment is therefore not an exact-score oracle
 for the game-wide run. These candidates still require human review.
+
+### Building the first practice-and-reveal card
+
+`build_training_card(game, ply_count, *, continuation_san, explanation)` builds
+an immutable `TrainingCard` before an actual main-line move. It preserves the
+source ply count, pre-move FEN, actual move SAN, prompt, continuation as a tuple
+of SAN strings, and explanation. Empty lines, blank explanations, out-of-range
+positions, and illegal continuation moves raise `ValueError`.
+
+Selection and explanation are explicit editorial inputs. The builder validates
+legal replay; it does not establish that a move is uniquely best, grade an
+answer, or automatically turn the largest loss into a puzzle. The returned data
+contains the reveal too; a future interface must show the prompt and position
+first and withhold the continuation, actual move, and explanation until reveal.
+
+For the first card, we selected the position before `16.Ne5`. A separate
+500,000-node, three-line Stockfish 19 review found several strong options,
+including `Nxg5`, `Ne5`, and `Bxf7+`. We therefore use `Bxf7+` as an illustrative
+forcing continuation, without labeling the original `Ne5` a mistake.
+
+This Python example uses the existing fixture and needs no running engine:
+
+```python
+import runpy
+import chess
+from chess_coach.pgn import parse_pgn
+from chess_coach.training import build_training_card
+
+game = parse_pgn(runpy.run_path("tests/test_pgn.py")["CHESS_COM_PGN"])
+card = build_training_card(
+    game, 30,
+    continuation_san=("Bxf7+", "Kg7", "Bxe8", "Qxe8"),
+    explanation=(
+        "Look at forcing checks before quieter moves. Bxf7+ captures a pawn "
+        "with check. After the illustrated reply Kg7, Bxe8 captures the rook. "
+        "Black can recapture with Qxe8: White has exchanged a bishop for a rook "
+        "and a pawn in this line. This is one continuation, not a forced or "
+        "unique solution; Ne5 is also a strong option in deeper analysis."
+    ),
+)
+
+# Show these first.
+print(card.prompt)
+print(chess.Board(card.position_fen))
+
+# Reveal these after the player has considered the position.
+print("Example:", " ".join(card.continuation_san))
+print(card.explanation)
+```
+
+The full selected line is `16.Bxf7+ Kg7 17.Bxe8 Qxe8`, including Black's
+recapture. On 2026-09-15 a manual end-to-end check confirmed that the card's FEN
+and original move match a result from the game-wide analyzer, and every move in
+the example line replays legally. The automated suite contains 45 tests; it
+does not assert exact engine evaluations.
