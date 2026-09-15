@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chess Coach · A position to think about</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #20362e; background: #f6f3ec; }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; }
+    main { max-width: 1120px; padding: 32px 28px 48px; margin: auto; }
+    header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #d8ded4; padding-bottom: 18px; gap: 16px; }
+    .brand { font-size: 15px; font-weight: 750; letter-spacing: .03em; }
+    .eyebrow { text-transform: uppercase; font-size: 11px; letter-spacing: .15em; font-weight: 750; color: #5b6c62; }
+    .badge { font-size: 12px; background: #e6ede3; padding: 7px 12px; border-radius: 20px; }
+    .intro { margin: 30px 0 25px; }
+    h1 { font-family: Georgia, serif; font-size: clamp(30px, 4vw, 44px); font-weight: 500; margin: 9px 0; letter-spacing: -.035em; }
+    .intro p { margin: 0; color: #5b6c62; line-height: 1.6; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 34px; align-items: start; }
+    figure { margin: 0; }
+    .board-wrap { padding: 8px; background: #243c35; border-radius: 8px; box-shadow: 0 12px 30px #243c3514; }
+    .board-frame svg { display: block; width: 100%; height: auto; }
+    figcaption { display: flex; justify-content: space-between; gap: 12px; margin: 12px 2px 0; font-size: 13px; color: #5b6c62; }
+    #step-label { color: #20362e; font-weight: 650; }
+    .panel { padding: 26px; background: #fffefa; border: 1px solid #e0e3d9; border-radius: 12px; }
+    h2 { margin: 7px 0 14px; font-size: 22px; font-weight: 650; }
+    p { line-height: 1.6; }
+    .prompt { font-size: 14px; color: #5b6c62; }
+    label { display: block; font-size: 13px; font-weight: 650; margin: 20px 0 8px; }
+    input, textarea { width: 100%; padding: 12px; border: 1px solid #b9c6ba; border-radius: 6px; background: #fffefa; color: #20362e; font: inherit; font-size: 15px; }
+    textarea { resize: vertical; min-height: 100px; }
+    button { font: inherit; font-size: 14px; font-weight: 650; border-radius: 6px; cursor: pointer; padding: 12px 16px; border: 1px solid #355b45; background: #355b45; color: white; }
+    button:hover { background: #294733; }
+    button:disabled { opacity: .4; cursor: default; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid #b77527; outline-offset: 3px; }
+    .primary { width: 100%; margin-top: 20px; }
+    .secondary { background: transparent; color: #355b45; }
+    .secondary:hover { background: #e6ede3; }
+    .note { font-size: 12px; color: #617267; margin: 12px 0 0; }
+    #playback { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
+    #step-count { font-size: 13px; color: #5b6c62; }
+    #reveal { margin-top: 24px; padding-top: 22px; border-top: 1px solid #d8ded4; }
+    .line { font-family: Georgia, serif; font-size: 23px; line-height: 1.6; margin: 12px 0; }
+    .explanation { font-size: 14px; white-space: pre-line; }
+    footer { border-top: 1px solid #d8ded4; margin-top: 30px; padding-top: 16px; color: #617267; font-size: 12px; line-height: 1.6; }
+    @media (max-width: 720px) {
+      main { padding: 20px 16px 30px; }
+      .layout { grid-template-columns: 1fr; gap: 22px; }
+      .panel { padding: 22px; }
+      .intro { margin-top: 24px; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header><div class="brand">CHESS COACH</div><span class="badge">Practice from your own games</span></header>
+  <section class="intro">
+    <div class="eyebrow">One position · One decision</div>
+    <h1>Pause. Find your idea.</h1>
+    <p>Take your time. Look for a move you can explain.</p>
+  </section>
+  <div class="layout">
+    <figure data-orientation="$orientation">
+      <div class="board-wrap">$frames</div>
+      <figcaption><span id="step-label" aria-live="polite">Starting position</span><span id="position-context">$player to move · Move $move_number</span></figcaption>
+      <nav id="playback" aria-label="Example continuation" hidden>
+        <button id="previous" type="button" class="secondary" disabled>← Previous</button>
+        <span id="step-count" aria-live="polite"></span>
+        <button id="next" type="button" class="secondary" $next_disabled>Next →</button>
+      </nav>
+    </figure>
+    <section class="panel" aria-labelledby="your-turn">
+      <div class="eyebrow">Your turn</div>
+      <h2 id="your-turn">What would you play?</h2>
+      <p class="prompt">$prompt</p>
+      <label for="move">Your proposed move</label>
+      <input id="move" type="text" maxlength="40" autocomplete="off" spellcheck="false" placeholder="Type a move in chess notation">
+      <label for="reasoning">What is your idea?</label>
+      <textarea id="reasoning" autocomplete="off" placeholder="What are you threatening? How might your opponent respond?"></textarea>
+      <p class="note">A reflection, not a graded answer. Your notes are not saved by this page.</p>
+      <button id="reveal-button" type="button" class="primary" aria-controls="reveal" aria-expanded="false">Reveal example</button>
+      <section id="reveal" aria-labelledby="example-title" tabindex="-1" hidden>
+        <div class="eyebrow">Explore the idea</div>
+        <h2 id="example-title">One continuation to consider</h2>
+        <p class="line">$continuation</p>
+        <p class="explanation">$explanation</p>
+        <p class="note">In your game, you played <strong>$played_move</strong>. Other strong moves may exist.</p>
+        <p class="note">Use Previous and Next below the board to follow the example.</p>
+        <button id="hide-example" type="button" class="secondary">Return to starting position</button>
+      </section>
+      <noscript><p>This card needs JavaScript for reveal and move navigation. The starting board remains visible.</p></noscript>
+    </section>
+  </div>
+  <footer>Practice one decision at a time. Take an idea back to your next game.
+    <div>$source_label</div>
+  </footer>
+</main>
+<script>
+  const frames = Array.from(document.querySelectorAll('.board-frame'));
+  const reveal = document.getElementById('reveal');
+  const revealButton = document.getElementById('reveal-button');
+  const playback = document.getElementById('playback');
+  const previous = document.getElementById('previous');
+  const next = document.getElementById('next');
+  let step = 0;
+
+  function showStep() {
+    frames.forEach((frame, index) => { frame.hidden = index !== step; });
+    document.getElementById('step-label').textContent = frames[step].dataset.label;
+    document.getElementById('position-context').textContent = frames[step].dataset.context;
+    document.getElementById('step-count').textContent = step + ' / ' + (frames.length - 1);
+    previous.disabled = step === 0;
+    next.disabled = step === frames.length - 1;
+  }
+
+  revealButton.addEventListener('click', () => {
+    reveal.hidden = false;
+    playback.hidden = false;
+    revealButton.hidden = true;
+    revealButton.setAttribute('aria-expanded', 'true');
+    showStep();
+    reveal.focus();
+  });
+  previous.addEventListener('click', () => { step = Math.max(0, step - 1); showStep(); });
+  next.addEventListener('click', () => { step = Math.min(frames.length - 1, step + 1); showStep(); });
+  document.getElementById('hide-example').addEventListener('click', () => {
+    step = 0;
+    showStep();
+    reveal.hidden = true;
+    playback.hidden = true;
+    revealButton.hidden = false;
+    revealButton.setAttribute('aria-expanded', 'false');
+    revealButton.focus();
+  });
+  showStep();
+</script>
+</body>
+</html>

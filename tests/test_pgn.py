@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 import chess
 import chess.pgn
@@ -18,24 +19,9 @@ SAMPLE_PGN = """\
 1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 *
 """
 
-CHESS_COM_PGN = """\
-[Event "Live Chess"]
-[Site "Chess.com"]
-[Date "2026.09.03"]
-[Round "-"]
-[White "Anonymized White"]
-[Black "Anonymized Black"]
-[Result "1-0"]
-[WhiteElo "1542"]
-[BlackElo "1539"]
-[TimeControl "600"]
-[EndTime "4:08:44 GMT+0000"]
-[Termination "Anonymized White won by resignation"]
-
-1. c4 e5 2. Nc3 d6 3. f4 exf4 4. d4 Nf6 5. Bxf4 Be7 6. e3 O-O 7. h3 c6 8. Nf3 h6
-9. Bd3 d5 10. cxd5 Nxd5 11. Nxd5 Qxd5 12. O-O g5 13. Bh2 Re8 14. b3 Bb4 15. Bc4
-Qe4 16. Ne5 Qxe3+ 17. Kh1 Rxe5 18. Bxf7+ Kg7 19. Bxe5+ Kh7 20. Qc2+ 1-0
-"""
+CHESS_COM_PGN = (
+    Path(__file__).resolve().parents[1] / "examples" / "game.pgn"
+).read_text(encoding="utf-8")
 
 class ParsePgnTests(unittest.TestCase):
     def test_parses_one_game_and_preserves_headers(self):
