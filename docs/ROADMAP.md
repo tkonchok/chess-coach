@@ -12,9 +12,9 @@ deployment. Automatic right/wrong grading is not required for this release.
 ## Current checkpoint
 
 - 3A–3E: domain analysis, reviewed card data, and the local practice page exist.
-- 3F: technical browser checks and an editorial usefulness assessment are recorded
-  in [VALIDATION.md](VALIDATION.md). A learner's fresh attempt and assessment remain
-  a human acceptance gate; automated tests cannot establish teaching effectiveness.
+- 3F: technical browser checks and the learner's report of noticing the bishop
+  sacrifice are recorded in [VALIDATION.md](VALIDATION.md). This is not evidence
+  of improved playing strength; automated tests cannot establish teaching value.
 - 4A: reusable command workflow, source/engine provenance, explicit acceptance or
   rejection, and two-game real-engine smoke check implemented. The second bundled
   game is synthetic and is labeled as such.
@@ -23,8 +23,11 @@ deployment. Automatic right/wrong grading is not required for this release.
   and analysis were verified locally. Browser integration is still milestone 6.
 - 5: [review checklist](TRAINING_REVIEW.md) and recorded review fields implemented;
   varied real-game teaching-quality validation remains open.
-- 6–9: not implemented. Framework, durable storage, access protection, and hosting
-  still require explicit decisions. No deployment or public push has occurred.
+- 6A: approved Flask adapter with a playable first-card board, explain/skip/reveal,
+  legal exploration, and separate before/after notes implemented locally. Browser
+  acceptance checks are incomplete. Import/review screens remain command-only.
+- 7–9: not implemented. Durable storage, access protection, and hosting still
+  require explicit decisions. No deployment or public push has occurred.
 
 ## 3F — Validate and close the first card
 
@@ -75,7 +78,7 @@ defended. Legal continuations and test fixtures alone do not satisfy this gate.
 
 ## 6 — Complete the local browser workflow
 
-Define these screens before choosing a framework:
+Agreed screen boundaries (Flask selected for the first local practice slice):
 
 1. Import: username, explicit refresh, or PGN with color selection.
 2. History: rating/date, coverage warnings, game list, editable selection.
@@ -87,7 +90,11 @@ Define these screens before choosing a framework:
 
 Bound input size, duration, and concurrency; handle process cleanup and failures.
 Do not add automatic grading. A separate worker service is a decision, not a
-requirement. Select framework and board library only after reviewing these needs.
+requirement. The first practice slice uses plain JavaScript and python-chess
+legality checks, with no new board library. Keep domain logic independent of Flask.
+Pre-reveal reasoning and post-reveal takeaways remain separate; reset/exploration
+must preserve both. A clear finish action encourages a break without rating or
+streak pressure. No AI interpretation is attached to the user's words in this slice.
 
 Done when: the entire workflow works in a local browser, including failure cases.
 

@@ -8,8 +8,9 @@ The long-term goal is to help players understand recurring weaknesses in their p
 
 Local prototype. PGN analysis, explicit editorial review, offline practice pages,
 and bounded Chess.com username import now work through command-line tools.
-The browser-only workflow, board move entry, durable reflections, and deployment
-are not implemented yet. See the [roadmap](docs/ROADMAP.md) and
+A local Flask practice screen now supports board move entry and separate before/
+after reflections. The complete browser-only workflow, durable reflections, and
+deployment are not implemented yet. See the [roadmap](docs/ROADMAP.md) and
 [validation log](docs/VALIDATION.md) for completed work and remaining gates.
 
 ## V1 Product Hypothesis
@@ -29,8 +30,8 @@ The initial version will focus on:
 - saved practice history and reflections
 
 Conversational coaching, learner memory, and history-guided recommendations follow
-the first private deployment. The current practice page still uses text move entry.
-Its examples are not automatic right/wrong grading.
+the first private deployment. The interactive practice screen accepts board moves;
+the older offline page still uses text entry. Neither automatically grades answers.
 
 ## Not in V1
 
@@ -71,14 +72,16 @@ Current decisions:
 - heavy chess analysis performed outside the browser
 - core chess/training logic should remain independent enough to support other interfaces in the future
 
-Frameworks, database technology, production chess-engine packaging, frontend stack,
-AI models, and deployment providers have not yet been finalized. Stockfish runs
-locally; command adapters and disposable JSON artifacts do not introduce a server
-or database. The only Python dependency remains `chess==1.11.2`.
+Flask is the approved local web adapter, with server-rendered HTML and plain
+JavaScript for board interaction. Python-chess remains the authority on legal
+moves; no separate JavaScript chess library was added. Database technology,
+production engine packaging, AI models, and hosting remain undecided. Stockfish
+runs locally for analysis, not during practice. Direct Python dependencies are
+`chess==1.11.2` and `Flask==3.1.3`.
 
 ## Local Development
 
-Create and activate the Python environment, then install the Python dependency:
+Create and activate the Python environment, then install the Python dependencies:
 
 ```bash
 python3 -m venv .venv
@@ -100,7 +103,48 @@ python -m unittest discover -s tests -v
 
 The `chess` Python package and Stockfish use GPL licenses. Licensing must be reviewed before distributing the application.
 
-### Try the local practice page
+### Try the interactive practice board
+
+From the project root:
+
+```bash
+.venv/bin/python -m flask --app chess_coach.web run --host 127.0.0.1 --port 5050
+```
+
+Open <http://127.0.0.1:5050>. Stop the development server with Ctrl+C in its
+terminal. Keep it bound to localhost; this is not a production deployment.
+
+Click/tap a piece and its destination, or drag it. The board highlights legal
+destinations and offers promotion choices. Keyboard users can navigate with
+arrows, activate squares with Enter/Space, and cancel selection with Escape.
+
+After proposing a move, explain your idea or explicitly skip. Reveal the reviewed
+example, then step through it or play either side to explore. Your original
+reasoning stays read-only after reveal; write new observations in the separate
+takeaway field. Starting position, undo, and example navigation preserve your
+proposal and both notes. Reset does not pretend you have not seen the answer.
+
+Notes exist **only in the current page**. Reloading or closing it loses them;
+copy anything you want to keep. They are not sent to the server or an AI. There
+is no automatic grading, engine search, account, or durable attempt storage here.
+The screen currently loads the first reviewed example, not arbitrary imports.
+
+The code boundary is deliberately small:
+
+- `web.py`: Flask routes, fresh board reconstruction, legal move validation,
+  and bounded JSON requests (8 KiB, 128 exploration plies).
+- `templates/practice.html`: accessible controls and separate reflection fields.
+- `static/practice.js`: selection, dragging, requests, and in-page practice state.
+- `static/practice.css`: responsive layout and board styling.
+
+Every request supplies a card identity and a UCI move path (such as `c4f7`),
+not a client-supplied FEN. Python replays the path from the card and returns the
+validated position and SAN. Each tab has its own state. The content ID guards
+against stale cards; it is not authentication or the durable review-version
+record planned for saved attempts. Reveal is a practice aid, not an anti-cheat
+boundary: its endpoint can be requested directly.
+
+### Generate the older offline practice page
 
 From the project root, generate the first card:
 
@@ -245,7 +289,7 @@ interactions still have manual smoke coverage, not an automated browser suite.
 New code boundaries: `workflow.py` connects chess analysis to editorial review;
 `chesscom.py` imports and summarizes public data; `__main__.py` handles arguments,
 files, and engine lifetime. Core comparison and card-building functions remain
-independent of the eventual web framework.
+independent of Flask.
 
 ## Current Milestone
 
@@ -264,15 +308,17 @@ Completed slices:
 - **3E — Local practice page:** view the first card in a browser, enter a move and reasoning, reveal an example, and step through its positions without a server.
 
 The first manually reviewed card runs through a local browser interface.
-Technical 3F checks are recorded in the validation log; the learner's fresh
-usefulness assessment remains open. Milestone 4's reusable/import workflows now
+Technical 3F checks and the learner's report of noticing the bishop sacrifice
+are recorded in the validation log. This is a useful observation, not measured
+improvement. Milestone 4's reusable/import workflows now
 exist as command adapters. Milestone 5 has an explicit review checklist, but still
 needs a varied real-game quality assessment. The highest engine loss is not
 automatically the best teaching position.
 
-No web framework, database, server, training-label thresholds, or AI coaching
-layer has been added. The next web step is to review the screens listed in the
-roadmap before choosing a framework or board library.
+Milestone 6A adds the approved local Flask practice screen. Import/history,
+analysis status, and editorial review still use the command workflow. No database,
+training-label thresholds, or AI coaching layer has been added. Browser acceptance
+checks remain before connecting those additional screens.
 
 Stockfish 19 characterization for the position before `16.Ne5` on 2026-09-09:
 

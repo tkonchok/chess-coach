@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chess Coach · Practice a decision</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='practice.css') }}">
+  <script src="{{ url_for('static', filename='practice.js') }}" defer></script>
+</head>
+<body>
+<main data-card-id="{{ card_id }}" data-orientation="{{ orientation }}">
+  <header><span class="brand">CHESS COACH</span><span class="badge">One position, at your pace</span></header>
+  <section class="intro">
+    <p class="eyebrow">Play · Explain · Explore · Reflect</p>
+    <h1>Pause. Find your idea.</h1>
+    <p>Make a move you can explain. There is no timer and no automatic grading.</p>
+  </section>
+  <div class="layout">
+    <section aria-label="Practice board">
+      <div id="board" role="group" aria-label="Chessboard" aria-describedby="board-help">
+        {% for square in squares %}
+        <button type="button" class="square {{ square.shade }}" data-square="{{ square.name }}"
+                aria-label="{{ square.name }}" aria-pressed="false" tabindex="{{ 0 if loop.first else -1 }}">
+          <span class="piece" aria-hidden="true"></span><span class="coordinate" aria-hidden="true">{{ square.name }}</span>
+        </button>
+        {% endfor %}
+      </div>
+      <div class="caption"><strong id="board-label">Starting position</strong><span id="position-context"></span></div>
+      <p id="board-help" class="note">Click or tap a piece, then its destination. You can also drag. Keyboard: arrows to navigate, Enter or Space to select, Escape to cancel.</p>
+      <div class="controls">
+        <button id="reset" class="secondary" type="button" disabled>Starting position</button>
+        <button id="your-move" class="secondary" type="button" disabled>Your proposed move</button>
+        <button id="undo" class="secondary" type="button" hidden>Undo exploration</button>
+      </div>
+      <nav id="playback" aria-label="Reviewed example" hidden>
+        <button id="previous" class="secondary" type="button">← Previous</button>
+        <span id="step-count"></span>
+        <button id="next" class="secondary" type="button">Next →</button>
+      </nav>
+      <p id="status" role="status" aria-live="polite">Loading the position…</p>
+      <button id="retry" class="secondary" type="button" hidden>Retry loading</button>
+    </section>
+    <section class="panel" aria-labelledby="stage-title">
+      <p id="stage-label" class="eyebrow">1 · Play</p>
+      <h2 id="stage-title">What would you play?</h2>
+      <p id="stage-help">Choose your move on the board. Legal destinations will be highlighted.</p>
+      <p id="proposal" hidden></p>
+      <section id="reflection" hidden>
+        <label for="reasoning">What was your idea? What reply did you expect?</label>
+        <textarea id="reasoning" maxlength="2000" autocomplete="off" placeholder="Your thinking matters more than polished wording."></textarea>
+        <p id="reasoning-note" class="note">Changing your proposed move keeps this draft; update it if your idea changes.</p>
+        <div id="reveal-actions">
+          <button id="reveal" type="button" class="primary">Reflect and reveal example</button>
+          <button id="skip" type="button" class="secondary">Skip reflection and reveal</button>
+        </div>
+      </section>
+      <section id="example" tabindex="-1" hidden>
+        <h3>One continuation to consider</h3>
+        <p id="example-line" class="line"></p>
+        <p id="explanation"></p>
+        <p id="actual-move" class="note"></p>
+        <p class="note">Other strong moves may exist. Step through the example or play either side to explore. No engine is running here.</p>
+        <label for="takeaway">What did you overlook? What would you check next time?</label>
+        <textarea id="takeaway" maxlength="2000" autocomplete="off" placeholder="One useful idea to take into another game."></textarea>
+        <button id="finish" type="button" class="primary">Finish this practice</button>
+        <p id="finish-note" tabindex="-1" hidden>That is enough for this session. You can keep exploring or take a break. Your notes are not saved; copy anything you want to keep before closing.</p>
+      </section>
+      <p class="note">Notes stay only in this page. Reset and exploration preserve them; reload or closing the page loses them. They are not sent to an AI or saved on the server.</p>
+    </section>
+  </div>
+  <footer>{{ source_label }}<br>Card {{ card_id[:12] }} · Local practice prototype</footer>
+  <noscript><p>This interactive board needs JavaScript. The offline card generator is still available.</p></noscript>
+</main>
+<dialog id="promotion" aria-labelledby="promotion-title">
+  <h2 id="promotion-title">Promote your pawn</h2>
+  <p>Choose the piece you want. You do not have to choose a queen.</p>
+  <div class="controls">
+    <button type="button" data-promotion="q">Queen</button>
+    <button type="button" data-promotion="r">Rook</button>
+    <button type="button" data-promotion="b">Bishop</button>
+    <button type="button" data-promotion="n">Knight</button>
+    <button type="button" id="cancel-promotion" class="secondary">Cancel</button>
+  </div>
+</dialog>
+{% for symbol, svg in pieces.items() %}<template data-piece="{{ symbol }}">{{ svg }}</template>{% endfor %}
+</body>
+</html>
