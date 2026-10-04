@@ -1,10 +1,10 @@
 # Teaching-quality release gate
 
-Automatic preparation is implemented but public release is blocked until at least six positions across both colors pass review. No editorial approval is inferred from engine output. The rows below are review candidates, not accepted lessons. These local output files are ignored and are not a permanent public dataset.
+Automatic preparation is implemented. The engine-fact release review below passed six positions across both colors; generated AI commentary remains blocked by its separate failed review. No editorial approval is inferred from engine output. The rows below are review candidates, not accepted lessons. These local output files are ignored and are not a permanent public dataset.
 
 ## Required review
 
-For each position, replay the continuation and alternatives; check score perspective and both comparisons; review the actual provider explanation for accuracy, uncertainty and usefulness. Identify unsupported claims about threats, forced outcomes, intentions or uniqueness. Decide whether the lesson gives a practical transferable idea. A legal line alone is insufficient. If positions fail, tighten selection and rerun; do not lower this gate.
+For each position, replay the continuation and alternatives; check score perspective and both comparisons. For an AI-enabled release, also review the actual provider explanation for accuracy, uncertainty and usefulness. Identify unsupported claims about threats, forced outcomes, intentions or uniqueness. Decide whether the lesson gives a practical transferable idea. A legal line alone is insufficient. If positions fail, tighten selection and rerun; do not lower this gate.
 
 The initial implementation had no Groq credentials. Later connectivity and the walkthrough sample attempts below were performed; teaching-quality acceptance remains pending. Structured-output support for the default model was checked against [Groq documentation](https://console.groq.com/docs/structured-outputs); it cannot establish explanation accuracy or free account availability.
 

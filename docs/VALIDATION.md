@@ -12,9 +12,18 @@
 - Credential-pattern scan: 89 working-tree release files and 111 original history blobs, no credential matches. Real names in the example PGN were anonymized; original history needs equivalent public-copy sanitization before pushing. Environment files, local databases and generated recordings are ignored. This is a targeted scan, not a security audit.
 - JavaScript syntax, dependency consistency and whitespace checks passed.
 
-## Pending release checks
+## Additional release checks performed
 
-Six-position engine-fact quality review using the shipped engine; container restart/shutdown/backup restore; sanitized public-history scan and GitHub CI; Railway trial verification, volume/HTTPS/secrets/cost configuration; deployed workflow and two real Google accounts; deployed restart persistence. Do not claim a deployed v1 until those checks pass.
+- Six freshly selected positions, three per color: exact-version validation, legal replay, factual capture/check/promotion/material/attack cross-checks, both-branch browser rendering and board/bar alignment passed with Stockfish 15.1-4. See the bounded, AI-assisted review in TEACHING_REVIEW.md; it does not approve generated strategic prose.
+- Actual Stockfish was observed before a scaled 0.2-second supervisor timeout. The job failed and no Stockfish children remained afterward. Running durable jobs became failed on recovery. The public configured deadline remains 240 seconds; a full four-minute wait was not performed.
+- Two saved attempts survived container replacement with the same test volume/session configuration. SQLite backup restored into a separate database with both attempts intact.
+- The final five-browser suite passed after the reply-status correction (73.479 seconds).
+- Public history scan: 117 blobs, no configured-secret/token-pattern, historical example-name or excluded-data matches. Published author/committer emails use the GitHub noreply address. Original local history is preserved on codex/release-v1 and codex/original-main; only sanitized main was pushed.
+- GitHub repository published as tkonchok/chess-coach, public/default main. CI passed: https://github.com/tkonchok/chess-coach/actions/runs/37178324658.
+
+## Pending deployment checks
+
+Railway app installation/repository authorization, Full Trial networking, volume/HTTPS/private secrets/cost configuration, deployed workflow with two real Google accounts, and deployed restart persistence. Do not claim a deployed v1 until these pass.
 
 AI teaching-quality review previously failed. Keep WALKTHROUGH_AI_ENABLED=0 publicly and do not configure a provider key for the engine-only release.
 

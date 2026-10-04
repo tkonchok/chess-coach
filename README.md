@@ -8,7 +8,7 @@ Flask, Python, Stockfish and SQLite. The coach plays an engine-supported opponen
 
 ## Status
 
-Local beta. Automated tests, real-engine checks and browser interactions pass; see [validation](docs/VALIDATION.md) for exact environments and pending release gates. Public deployment and two-account live sign-in verification remain pending. Public AI commentary is disabled; board-derived coaching works without a provider.
+Local beta. Automated tests, real-engine checks and browser interactions pass; see [validation](docs/VALIDATION.md) for exact environments and pending release gates. The source is published on GitHub with passing CI. Public deployment and two-account live sign-in verification remain pending. Public AI commentary is disabled; board-derived coaching works without a provider.
 
 ## Run locally
 
