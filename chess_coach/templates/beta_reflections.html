@@ -1,0 +1,3 @@
+{% extends 'beta_base.html' %}
+{% block body %}<section class="intro"><p class="eyebrow">Ideas worth keeping</p><h1>Your reflections</h1><p>Your saved notes and recollections, ready to revisit.</p></section>
+<section class="panel">{% if attempts %}<ul class="history-list">{% for attempt in attempts %}<li><a href="{{ url_for('attempt_detail',submission=attempt.submission) }}"><span><strong>Saved reflection</strong><br>{{ attempt.completed|utcdate }}</span><span>Open →</span></a></li>{% endfor %}</ul>{% else %}<h2>Keep an idea when it matters.</h2><p>Open a practice position, choose Reflect &amp; save, and keep a note or reflection choice here.</p><a href="{{ url_for('puzzles') }}">Go to puzzles →</a>{% endif %}</section>{% endblock %}

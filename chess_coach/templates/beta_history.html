@@ -1,0 +1,5 @@
+{% extends 'beta_base.html' %}
+{% block body %}<section class="panel"><h1>Practice history</h1>
+{% if attempts %}<p class="note">Return to the position, your original idea, and what you learned.</p><ul class="history-list">{% for attempt in attempts %}<li><a href="{{ url_for('attempt_detail',submission=attempt.submission) }}"><span><strong>Practice session</strong><br>{{ attempt.completed|utcdate }}</span><span>Revisit position →</span></a></li>{% endfor %}</ul>
+{% else %}<p id="history-empty">Choose a game and practice a position. Select Save and finish to add your first session here.</p><a href="{{ url_for('home') }}">Choose a game</a>{% endif %}
+</section>{% endblock %}

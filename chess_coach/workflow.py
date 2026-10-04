@@ -8,12 +8,13 @@ from copy import deepcopy
 from dataclasses import asdict
 from datetime import datetime, timezone
 from hashlib import sha256
+import json
 
 import chess
 
 from chess_coach.analysis import analyze_player_moves
 from chess_coach.pgn import board_after_ply, parse_pgn
-from chess_coach.training import build_training_card
+from chess_coach.training import TrainingCard, build_training_card
 
 
 MAX_PGN_BYTES = 1_000_000
@@ -82,8 +83,6 @@ def review_candidate(report: dict, review: dict) -> dict:
     A digest detects accidental source edits; it is not an authenticity signature.
     A reviewed card is a snapshot. Later edits produce a different version ID.
     """
-    import json
-
     try:
         if report["schema_version"] != 1:
             raise ValueError("Unsupported analysis report version")
@@ -133,3 +132,49 @@ def review_candidate(report: dict, review: dict) -> dict:
         return result
     except (KeyError, TypeError, AttributeError) as error:
         raise ValueError(f"Invalid report or review structure: {error}") from error
+
+
+def card_from_review(snapshot: dict) -> TrainingCard:
+    """Validate an accepted review snapshot and reconstruct its card.
+
+    Checks consistency, not authenticity or teaching quality. No file access or
+    engine analysis is needed, and the supplied snapshot is left unchanged.
+    """
+    if not isinstance(snapshot, dict):
+        raise ValueError("Review snapshot must be a dictionary")
+    try:
+        if type(snapshot["schema_version"]) is not int or snapshot["schema_version"] != 1:
+            raise ValueError("Unsupported review snapshot version")
+        if snapshot["review"]["decision"] != "accept":
+            raise ValueError("Only accepted reviews can be opened for practice")
+
+        # The writer hashed the snapshot before adding version_id. Reproduce
+        # that calculation without removing anything from the caller's dict.
+        payload = {key: value for key, value in snapshot.items() if key != "version_id"}
+        encoded = json.dumps(payload, sort_keys=True, allow_nan=False)
+        if snapshot["version_id"] != sha256(encoded.encode("utf-8")).hexdigest():
+            raise ValueError("Review snapshot no longer matches its version digest")
+
+        # Adapt the saved single candidate back to the report shape expected by
+        # our existing validator. This replays chess moves, not engine analysis.
+        report = {
+            "schema_version": snapshot["schema_version"],
+            "source": snapshot["source"],
+            "player_color": snapshot["player_color"],
+            "engine": snapshot["engine"],
+            "created_at": snapshot["analysis_created_at"],
+            "candidates": [snapshot["candidate"]],
+        }
+        rebuilt = review_candidate(report, snapshot["review"])
+
+        # JSON compares the same representation before/after a disk round trip:
+        # both Python tuples and lists encode as JSON arrays.
+        if (json.dumps(snapshot, sort_keys=True, allow_nan=False)
+                != json.dumps(rebuilt, sort_keys=True, allow_nan=False)):
+            raise ValueError("Saved card does not match its source game and review")
+
+        card_data = rebuilt["card"]
+        card_data["continuation_san"] = tuple(card_data["continuation_san"])
+        return TrainingCard(**card_data)
+    except (KeyError, TypeError, AttributeError) as error:
+        raise ValueError(f"Invalid review snapshot structure: {error}") from error

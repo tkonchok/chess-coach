@@ -7,24 +7,34 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='practice.css') }}">
   <script src="{{ url_for('static', filename='practice.js') }}" defer></script>
 </head>
-<body>
-<main data-card-id="{{ card_id }}" data-orientation="{{ orientation }}">
-  <header><span class="brand">CHESS COACH</span><span class="badge">One position, at your pace</span></header>
-  <section class="intro">
-    <p class="eyebrow">Play · Explain · Explore · Reflect</p>
-    <h1>Pause. Find your idea.</h1>
-    <p>Make a move you can explain. There is no timer and no automatic grading.</p>
-  </section>
+<body class="practice-screen">
+<main data-card-id="{{ card_id }}" data-orientation="{{ orientation }}" {% if beta_mode %}data-api-base="/practice/{{ version_id }}" data-version="{{ version_id }}" data-csrf="{{ csrf_token }}"{% endif %}>
+  {% if beta_mode %}{% include '_beta_header.html' %}{% else %}<header class="app-header"><span class="brand"><span class="brand-mark" aria-hidden="true">♞</span>Chess Coach</span><span class="badge">Local practice</span></header>{% endif %}
   <div class="layout">
-    <section aria-label="Practice board">
+    <section class="panel board-panel" aria-label="Practice board">
+      <div class="board-frame">
+      <div class="rank-labels" aria-hidden="true">{% for rank in board_ranks %}<span>{{ rank }}</span>{% endfor %}</div>
+      <div class="board-canvas">
       <div id="board" role="group" aria-label="Chessboard" aria-describedby="board-help">
         {% for square in squares %}
         <button type="button" class="square {{ square.shade }}" data-square="{{ square.name }}"
                 aria-label="{{ square.name }}" aria-pressed="false" tabindex="{{ 0 if loop.first else -1 }}">
-          <span class="piece" aria-hidden="true"></span><span class="coordinate" aria-hidden="true">{{ square.name }}</span>
+          <span class="piece" aria-hidden="true"></span>
         </button>
         {% endfor %}
       </div>
+      {% if beta_mode %}<svg id="engine-arrow" class="engine-arrow" viewBox="0 0 800 800" aria-hidden="true" hidden>
+        <defs><marker id="arrowhead" markerWidth="3" markerHeight="3" refX="2.2" refY="1.5" orient="auto"><path d="M 0 0 L 3 1.5 L 0 3 Z" fill="#bc6c25"/></marker></defs>
+        <path id="engine-arrow-path" fill="none" stroke="#bc6c25" stroke-width="15" stroke-linecap="round" marker-end="url(#arrowhead)"/>
+      </svg>{% endif %}
+      </div>
+      {% if beta_mode %}<div id="eval-bar" class="eval-bar" role="meter" aria-label="White evaluation share" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" aria-valuetext="Evaluation unavailable before reveal"><svg viewBox="0 0 24 100" preserveAspectRatio="none" aria-hidden="true"><rect width="24" height="100" fill="#fff"/><rect id="eval-black" width="24" height="50" fill="#28322d"/></svg></div>{% endif %}
+      <div class="file-labels" aria-hidden="true">{% for file in board_files %}<span>{{ file }}</span>{% endfor %}</div>
+      </div>
+      {% if beta_mode %}<section id="live-engine" class="live-engine" aria-label="Exploration engine" hidden>
+        <div class="engine-summary"><strong id="engine-score">—</strong><span id="engine-state" role="status" aria-live="polite">Engine feedback appears after reveal.</span><span id="engine-line"></span><span class="note">White perspective · Short search, approximate evaluation</span></div>
+        <div class="engine-options"><label><input id="live-enabled" type="checkbox" checked> Live engine</label><label><input id="arrow-enabled" type="checkbox"> Best-move arrow</label><button id="engine-retry" type="button" class="secondary compact">Refresh</button></div>
+      </section>{% endif %}
       <div class="caption"><strong id="board-label">Starting position</strong><span id="position-context"></span></div>
       <p id="board-help" class="note">Click or tap a piece, then its destination. You can also drag. Keyboard: arrows to navigate, Enter or Space to select, Escape to cancel.</p>
       <div class="controls">
@@ -32,7 +42,7 @@
         <button id="your-move" class="secondary" type="button" disabled>Your proposed move</button>
         <button id="undo" class="secondary" type="button" hidden>Undo exploration</button>
       </div>
-      <nav id="playback" aria-label="Reviewed example" hidden>
+      <nav id="playback" aria-label="{{ 'Engine example' if beta_mode else 'Reviewed example' }}" hidden>
         <button id="previous" class="secondary" type="button">← Previous</button>
         <span id="step-count"></span>
         <button id="next" class="secondary" type="button">Next →</button>
@@ -40,35 +50,97 @@
       <p id="status" role="status" aria-live="polite">Loading the position…</p>
       <button id="retry" class="secondary" type="button" hidden>Retry loading</button>
     </section>
-    <section class="panel" aria-labelledby="stage-title">
+    <section class="panel study-panel" aria-labelledby="stage-title">
+      {% if beta_mode %}<div class="coach-identity"><span class="coach-avatar" aria-hidden="true">♞</span><div><strong>Your practice coach</strong><span class="turn-badge">{{ 'White' if orientation == 'white' else 'Black' }} to move</span><span>One decision at a time</span></div><div class="coach-info"><button id="coach-info" type="button" class="secondary info-button" aria-label="About coaching and privacy" aria-expanded="false" aria-controls="coach-info-panel">ⓘ</button>
+              <div id="coach-info-panel" class="info-panel" hidden><strong>About coaching</strong><p>Engine-fact coaching works without an AI provider. When AI commentary is enabled, starting practice sends positions and bounded engine evidence to Groq. Your identity, notes, and reflections are excluded. AI wording can be mistaken; engine lines are illustrative and short searches are approximate.</p><p id="commentary-status" role="status">Commentary has not been requested.</p><p>Saved coaching compares the recommendation with the original game move. This walkthrough compares your proposed move with the recommendation at matching budgets. Walkthrough navigation is not saved.</p></div>
+            </div></div>{% endif %}
       <p id="stage-label" class="eyebrow">1 · Play</p>
       <h2 id="stage-title">What would you play?</h2>
+      <p id="original-game-move">{% if beta_mode %}Original move · move {{ original_move_number }}: <strong>{{ played_move_san }}</strong>{% set notation = played_move_san|replace('+','')|replace('#','') %}{% if notation == 'O-O' %} (kingside castling){% elif notation == 'O-O-O' %} (queenside castling){% endif %}.{% else %}In your game, you played <strong>{{ played_move_san }}</strong>.{% endif %}</p>
+      <div class="pre-reveal-notes">
+      <details id="original-reflection">
+        <summary id="original-summary">Add a thought about your original move (optional)</summary>
+        <label for="original-reasoning">Do you remember what you were trying to achieve in the game?</label>
+        <textarea id="original-reasoning" maxlength="2000" autocomplete="off" aria-describedby="original-reasoning-note" placeholder="Only what you remember; no need to reconstruct a reason."></textarea>
+      </details>
+      <label class="memory-choice"><input id="dont-remember" type="checkbox"> I don't remember</label>
+      <p id="original-reasoning-note" class="note">You can leave this unanswered and simply play.</p>
+      </div>
+
       <p id="stage-help">Choose your move on the board. Legal destinations will be highlighted.</p>
       <p id="proposal" hidden></p>
+      {% if beta_mode %}<div class="coach-actions" role="group" aria-label="Practice navigation"><button id="walk-start" type="button" class="secondary" title="Play both sides with arrows; click again for coach replies">Self analysis</button><button id="coach-prev" type="button" class="secondary">← Previous</button><button id="coach-next" type="button" class="secondary">Next →</button><button id="coach-back" type="button" class="secondary">↶ Take back</button><button id="coach-reset" type="button" class="secondary">↺ Reset</button><button id="coach-compare" type="button" class="secondary">See recommended line</button><button id="coach-save" type="button" class="secondary">Reflect &amp; save</button><a id="coach-another" class="secondary" href="{{ url_for('puzzles') }}" hidden>Choose another puzzle →</a><button id="coach-reply-retry" type="button" hidden>Retry reply</button></div>{% endif %}
       <section id="reflection" hidden>
-        <label for="reasoning">What was your idea? What reply did you expect?</label>
-        <textarea id="reasoning" maxlength="2000" autocomplete="off" placeholder="Your thinking matters more than polished wording."></textarea>
-        <p id="reasoning-note" class="note">Changing your proposed move keeps this draft; update it if your idea changes.</p>
+        <div class="pre-reveal-notes"><details id="attempt-reflection">
+          <summary id="attempt-summary">Add a thought about this attempt (optional)</summary>
+          <label for="reasoning">What is your idea now? What reply do you expect?</label>
+          <textarea id="reasoning" maxlength="2000" autocomplete="off" placeholder="A short thought is enough, or leave this blank."></textarea>
+          <p id="reasoning-note" class="note">Changing your proposed move keeps this draft; update it if your idea changes.</p>
+        </details></div>
         <div id="reveal-actions">
-          <button id="reveal" type="button" class="primary">Reflect and reveal example</button>
-          <button id="skip" type="button" class="secondary">Skip reflection and reveal</button>
+          <button id="reveal" type="button" class="primary" disabled>{{ 'Reveal engine example' if beta_mode else 'Reveal reviewed example' }}</button>
         </div>
       </section>
       <section id="example" tabindex="-1" hidden>
+        {% if beta_mode %}<div class="study-tabs" role="tablist" aria-label="Practice tools">
+          <button id="tab-coaching" type="button" role="tab" aria-selected="true" aria-controls="coaching-content">Explore the moves</button>
+          <button id="tab-reflection" type="button" role="tab" aria-selected="false" aria-controls="reflection-content" tabindex="-1">Reflection &amp; save</button>
+        </div>{% endif %}
+        <div id="coaching-content" {% if beta_mode %}role="tabpanel" aria-labelledby="tab-coaching"{% endif %}>
+        {% if beta_mode %}<section class="companion" aria-labelledby="companion-title">
+          <div class="companion-heading"><h3 id="companion-title">Let’s follow your idea</h3>
+
+          </div>
+          <p id="walk-text" role="status" aria-live="polite">Follow your idea and the recommended line, one move at a time.</p>
+          <p id="walk-comparison" class="note" hidden></p>
+
+          <div id="walk-branches" class="controls" role="group" aria-label="Walkthrough branch" hidden>
+            <button id="walk-your" type="button" class="secondary" aria-pressed="true">Your move</button>
+            <button id="walk-recommended" type="button" class="secondary" aria-pressed="false">Recommended move</button>
+          </div>
+          <nav id="walk-navigation" aria-label="Walkthrough moves" hidden>
+            <button id="walk-previous" type="button" class="secondary">Previous move</button><span id="walk-count"></span><button id="walk-next" type="button">Next move</button>
+          </nav>
+          <div id="walk-end" class="controls" hidden><button id="walk-free" type="button" class="secondary">Self analysis</button><button id="walk-reflect" type="button" class="secondary">Reflection &amp; save</button></div>
+        </section>{% endif %}
         <h3>One continuation to consider</h3>
-        <p id="example-line" class="line"></p>
-        <p id="explanation"></p>
-        <p id="actual-move" class="note"></p>
-        <p class="note">Other strong moves may exist. Step through the example or play either side to explore. No engine is running here.</p>
-        <label for="takeaway">What did you overlook? What would you check next time?</label>
+        {% if beta_mode %}<h3 id="recommended-label" class="recommended-label">Recommended line · starting position</h3><p id="recommended-line" class="line"></p>{% endif %}{% if beta_mode %}<p id="branch-line-label" class="note" hidden></p>{% endif %}<p id="example-line" class="line"></p>
+        {% if not beta_mode %}<p id="explanation"></p><p id="actual-move" class="note"></p>{% endif %}
+        </div>
+        <section id="reflection-content" {% if beta_mode %}role="tabpanel" aria-labelledby="tab-reflection" hidden{% endif %}>
+        {% if beta_mode %}
+        <section class="reflection-card" aria-labelledby="reflection-title">
+        <h3 id="reflection-title">What were you thinking in the game?</h3>
+        <p class="note">Tap what fits. You can skip.</p>
+        <select id="original-choice" hidden aria-hidden="true" tabindex="-1">
+          <option value="">Choose a response, or skip</option>
+          <option value="missed_threat">I didn't notice the threat</option>
+          <option value="miscalculated">I saw it, but miscalculated</option>
+          <option value="other_idea">I thought my move achieved something else</option>
+          <option value="time_pressure">I was short on time</option>
+          <option value="misclick">I misclicked</option>
+          <option value="dont_remember">I don't remember</option>
+        </select>
+        <fieldset class="reflection-chips"><legend class="visually-hidden">Original-game reflection (optional)</legend>
+          {% for value, label in [('miscalculated','I miscalculated'),('missed_threat','Missed a threat'),('time_pressure','Short on time'),('other_idea','Had another idea'),('misclick','Misclicked'),('dont_remember','I don’t remember')] %}
+          <label class="reflection-chip"><input type="radio" name="reflection-choice" value="{{ value }}"><span>{{ label }}</span></label>
+          {% endfor %}
+        </fieldset>
+        <button id="skip-reflection" type="button" class="secondary">Skip reflection choice</button>
+        </section>
+        {% endif %}
+        <label for="takeaway">What will you look for next time?</label>
         <textarea id="takeaway" maxlength="2000" autocomplete="off" placeholder="One useful idea to take into another game."></textarea>
-        <button id="finish" type="button" class="primary">Finish this practice</button>
-        <p id="finish-note" tabindex="-1" hidden>That is enough for this session. You can keep exploring or take a break. Your notes are not saved; copy anything you want to keep before closing.</p>
+        <button id="finish" type="button" class="primary">{{ 'Save and finish' if beta_mode else 'Finish this practice' }}</button>
+        <p id="finish-note" tabindex="-1" hidden>{% if beta_mode %}Saved.{% else %}That is enough for this session. You can keep exploring or take a break. Your notes are not saved; copy anything you want to keep before closing.{% endif %}</p>
+      <p class="note">{% if beta_mode %}Save keeps your notes. Unfinished drafts disappear on reload. Notes stay out of AI requests.{% else %}Notes stay only in this page. Reset and exploration preserve them; reload or closing the page loses them. They are not sent to an AI or saved on the server.{% endif %}</p>
+        </section>
       </section>
-      <p class="note">Notes stay only in this page. Reset and exploration preserve them; reload or closing the page loses them. They are not sent to an AI or saved on the server.</p>
     </section>
   </div>
-  <footer>{{ source_label }}<br>Card {{ card_id[:12] }} · Local practice prototype</footer>
+  <footer><span>{{ 'Completed-game practice · Your reflections stay private' if beta_mode else 'Local practice prototype' }}</span>
+    <details class="provenance"><summary>Source and exercise details</summary>{{ source_label }}<br>Card {{ card_id[:12] }}</details>
+  </footer>
   <noscript><p>This interactive board needs JavaScript. The offline card generator is still available.</p></noscript>
 </main>
 <dialog id="promotion" aria-labelledby="promotion-title">

@@ -1,0 +1,22 @@
+{% extends 'beta_base.html' %}
+{% block body %}
+<section class="intro"><p class="eyebrow">Your games</p><h1>Browse game history</h1><p>Choose a month, then a game to turn into practice.</p></section>
+<section class="panel">
+<form method="get" action="{{ url_for('archive') }}" class="archive-controls">
+<div class="archive-field">
+<label for="archive-username">Chess.com username</label><input id="archive-username" name="username" value="{{ bundle.username }}" maxlength="50" required>
+</div><div class="archive-field"><label for="archive-month">Month</label><select id="archive-month" name="month">{% for month in bundle.archive.months %}<option value="{{ month }}" {% if month == bundle.archive.month %}selected{% endif %}>{{ month }}</option>{% endfor %}</select>
+</div><div class="archive-field"><label for="archive-time-class">Time control</label><select id="archive-time-class" name="time_class">{% for value,label in [('all','All'),('rapid','Rapid'),('blitz','Blitz'),('bullet','Bullet'),('daily','Daily')] %}<option value="{{ value }}" {% if value == bundle.archive.time_class %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+</div><div class="archive-field"><label for="archive-result">Result</label><select id="archive-result" name="result">{% for value,label in [('all','All results'),('win','Wins'),('loss','Losses'),('draw','Draws')] %}<option value="{{ value }}" {% if value == bundle.archive.result %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+</div><button class="primary">Browse games</button></form>
+<p class="note">Completed standard games, rated or casual. Variants are excluded.</p>
+{% if bundle.username %}<h2>{{ bundle.username }} · {{ bundle.archive.month or 'No available archives' }}</h2>
+<p role="status">{{ bundle.archive.total }} games · Page {{ bundle.archive.page }} of {{ bundle.archive.pages }}</p>
+{% for warning in bundle.warnings %}<p role="status">{{ warning }}</p>{% endfor %}
+{% include '_game_rows.html' %}
+<nav class="archive-pagination" aria-label="Game history pages">
+{% if bundle.archive.page > 1 %}<a class="secondary" href="{{ url_for('archive',username=bundle.username,month=bundle.archive.month,time_class=bundle.archive.time_class,result=bundle.archive.result,page=bundle.archive.page-1) }}">← Newer games</a>{% endif %}
+{% if bundle.archive.page < bundle.archive.pages %}<a class="secondary" href="{{ url_for('archive',username=bundle.username,month=bundle.archive.month,time_class=bundle.archive.time_class,result=bundle.archive.result,page=bundle.archive.page+1) }}">Older games →</a>{% endif %}
+<a href="{{ url_for('home') }}">Back to Games</a></nav>
+{% endif %}</section>
+{% endblock %}

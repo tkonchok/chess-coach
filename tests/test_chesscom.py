@@ -1,11 +1,13 @@
 import copy
 import json
+import ssl
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+from urllib.error import URLError
 
-from chess_coach.chesscom import ApiError, ChessComClient, import_history
+from chess_coach.chesscom import ApiError, ChessComClient, import_history, browse_archive, _request
 
 
 NOW = 1_789_430_400  # Fixed clock: network-free tests must not age out.
@@ -42,6 +44,57 @@ class HistoryTests(unittest.TestCase):
         }
         client.get.side_effect = lambda url, **kwargs: copy.deepcopy(responses[url])
         return client
+
+    def test_archive_browses_old_months_and_every_page_without_recent_cap(self):
+        from datetime import datetime, timezone
+        old=int(datetime(2020,2,15,tzinfo=timezone.utc).timestamp())
+        records=[archived_game(n,end_time=old-n*60,time_class='blitz',rated=False) for n in range(1,124)]
+        client=self.client([])
+        original=client.get.side_effect
+        client.get.side_effect=lambda url,**kw: (
+            {'archives':[BASE+'/games/2020/02',BASE+'/games/2026/09','https://evil.example/archive']}
+            if url.endswith('/archives') else {'games':records} if url.endswith('2020/02') else original(url,**kw))
+        pages=[browse_archive(client,'Learner',month='2020-02',page=n,now=NOW) for n in (1,2,3)]
+        self.assertEqual([len(page['games']) for page in pages],[50,50,23])
+        self.assertEqual(len({g['id'] for page in pages for g in page['games']}),123)
+        self.assertEqual(pages[0]['archive']['months'],['2026-09','2020-02'])
+        self.assertEqual(pages[0]['games'][0]['time_class'],'blitz')
+        self.assertFalse(pages[0]['games'][0]['rated'])
+        empty=browse_archive(client,'learner',month='2020-02',time_class='rapid',now=NOW)
+        self.assertEqual(empty['games'],[])
+        with self.assertRaises(ValueError):browse_archive(client,'learner',month='2020-02',page=4,now=NOW)
+        with self.assertRaises(ValueError):browse_archive(client,'learner',month='2019-01',now=NOW)
+
+    def test_archive_result_filter_uses_player_perspective_before_pagination(self):
+        losses=[archived_game(n,color='black',result='resigned') for n in range(1,57)]
+        games=losses+[archived_game(100),archived_game(101,color='black'),
+                      archived_game(102,result='agreed'),archived_game(103,color='black',result='agreed')]
+        client=self.client(games)
+        first=browse_archive(client,'learner',result='loss',now=NOW)
+        second=browse_archive(client,'learner',result='loss',page=2,now=NOW)
+        self.assertEqual(first['archive']['total'],56)
+        self.assertEqual(first['archive']['pages'],2)
+        self.assertEqual(len(second['games']),6)
+        self.assertTrue(all(game['result']=='loss' for game in first['games']+second['games']))
+        for result in ('win','draw'):
+            filtered=browse_archive(client,'learner',result=result,now=NOW)
+            self.assertEqual(len(filtered['games']),2)
+            self.assertTrue(all(game['result']==result for game in filtered['games']))
+        with self.assertRaises(ValueError):browse_archive(client,'learner',result='wrong',now=NOW)
+
+    def test_archive_validation_and_bounded_legal_replay(self):
+        client=self.client([archived_game(1),archived_game(2,rules='chess960'),
+                            archived_game(3,pgn=''),archived_game(4),archived_game(1)])
+        result=browse_archive(client,'learner',now=NOW)
+        self.assertEqual(len(result['games']),2)
+        self.assertEqual(result['archive']['total'],3)
+        self.assertTrue(result['warnings'])
+        self.assertEqual(client.get.call_count,2)
+        for options in ({'month':'../../evil'},{'page':0},{'time_class':'other'}):
+            with self.assertRaises(ValueError):browse_archive(client,'learner',now=NOW,**options)
+        with self.assertRaises(ValueError):browse_archive(client,'../evil',now=NOW)
+        client.get.side_effect=lambda *args,**kw:{'archives':[]}
+        self.assertEqual(browse_archive(client,'learner',now=NOW)['archive']['months'],[])
 
     def test_selects_both_colors_and_includes_wins_draws_in_recent_suggestions(self):
         client = self.client([archived_game(3, color="black", result="agreed"),
@@ -158,6 +211,27 @@ class HistoryTests(unittest.TestCase):
 
 
 class ClientTests(unittest.TestCase):
+    def test_https_uses_packaged_roots_and_keeps_verification_enabled(self):
+        response=Mock(status=200,headers={})
+        response.read.return_value=b'{}'
+        opener=Mock()
+        opener.open.return_value.__enter__=Mock(return_value=response)
+        opener.open.return_value.__exit__=Mock(return_value=False)
+        with patch('chess_coach.chesscom.build_opener',return_value=opener) as build:
+            self.assertEqual(_request(BASE,{}),(200,{},b'{}'))
+        context=build.call_args.args[1]._context
+        self.assertTrue(context.check_hostname)
+        self.assertEqual(context.verify_mode,ssl.CERT_REQUIRED)
+        self.assertGreater(context.cert_store_stats()['x509_ca'],0)
+
+    def test_tls_and_connection_failures_are_distinguished(self):
+        for reason,kind in ((ssl.SSLCertVerificationError('untrusted'),'tls'),(OSError('unreachable'),'connection')):
+            opener=Mock()
+            opener.open.side_effect=URLError(reason)
+            with patch('chess_coach.chesscom.build_opener',return_value=opener), self.assertRaises(ApiError) as caught:
+                _request(BASE,{})
+            self.assertEqual(caught.exception.kind,kind)
+
     def test_cache_avoids_request_and_explicit_refresh_revalidates(self):
         transport = Mock(side_effect=[(200, {"etag": "v1", "cache-control": "max-age=3600"},
                                        b'{"username":"learner"}'), (304, {}, b"")])

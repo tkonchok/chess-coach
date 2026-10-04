@@ -1,11 +1,17 @@
 from dataclasses import replace
+import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import Mock, patch
 
 import chess
 
 from chess_coach.pgn import parse_pgn
+from chess_coach.analysis import EngineEvaluation, MoveComparison
 from chess_coach.training import TrainingCard, build_training_card
-from chess_coach.web import create_app
+from chess_coach.web import create_app, create_app_from_review
+from chess_coach.workflow import analyze_pgn, review_candidate
 
 
 def position_card(fen, line):
@@ -43,6 +49,37 @@ class PracticeWebTests(unittest.TestCase):
         self.assertNotIn("played_move_san", self.initial)
         self.assertIn("frame-ancestors 'none'", response.headers["Content-Security-Policy"])
 
+    def test_initial_page_shows_original_move_without_revealing_example_or_playing_it(self):
+        black_card = build_training_card(parse_pgn("1. e4 e5 *"), 1,
+                                         continuation_san=["c5", "Nf3"],
+                                         explanation="An alternative response to e4.")
+        for card in (self.card, black_card):
+            with self.subTest(played_move=card.played_move_san):
+                client = create_app(card).test_client()
+                page = client.get("/").get_data(as_text=True)
+                self.assertIn(
+                    f'In your game, you played <strong>{card.played_move_san}</strong>.',
+                    page,
+                )
+                self.assertNotIn(card.explanation, page)
+                self.assertIn('<p id="example-line" class="line"></p>', page)
+                initial = client.get("/api/position").get_json()
+                self.assertEqual(initial["fen"], card.position_fen)
+                self.assertEqual(initial["sans"], [])
+
+    def test_piece_colors_use_svg_attributes_instead_of_blocked_inline_styles(self):
+        from xml.etree import ElementTree
+        from chess_coach.web import piece_svg
+        for symbol in 'PNBRQKpnbrqk':
+            markup=str(piece_svg(symbol))
+            self.assertNotIn('style=',markup)
+            self.assertNotIn('id=',markup)
+            ElementTree.fromstring(markup)
+        for symbol,fill in [('N','#ffffff'),('n','#000000')]:
+            root=ElementTree.fromstring(str(piece_svg(symbol)))
+            paths=root.findall('.//{http://www.w3.org/2000/svg}path')
+            self.assertEqual([path.get('fill') for path in paths[:2]],[fill,fill])
+
     def test_move_response_contains_canonical_san_and_updated_position(self):
         result = self.post(["e2e4"]).get_json()
         board = chess.Board()
@@ -52,6 +89,18 @@ class PracticeWebTests(unittest.TestCase):
         self.assertEqual(result["pieces"]["e4"], "P")
         self.assertEqual(result["turn"], "black")
         self.assertNotIn("e2", result["pieces"])
+
+    def test_reflections_are_optional_and_original_reasoning_is_separate(self):
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertIn('<details id="original-reflection">', page)
+        self.assertIn('id="original-reasoning"', page)
+        self.assertIn('id="dont-remember"', page)
+        self.assertIn('<details id="attempt-reflection">', page)
+        self.assertIn('id="reasoning"', page)
+        self.assertIn('id="takeaway"', page)
+        self.assertIn('>Reveal reviewed example</button>', page)
+        self.assertNotIn('id="skip"', page)
+        self.assertNotIn(' required', page)
 
     def test_illegal_move_rejected_and_requests_do_not_share_board_state(self):
         self.assertEqual(self.post(["e2e5"]).status_code, 400)
@@ -142,3 +191,79 @@ class PracticeWebTests(unittest.TestCase):
             "card_id": initial["card_id"], "moves": reveal["moves"]})
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.get_json()["sans"], ["Bxf7+", "Kg7", "Bxe8", "Qxe8"])
+
+
+class ReviewedAppTests(unittest.TestCase):
+    def setUp(self):
+        directory = TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.path = Path(directory.name) / "review.json"
+
+    def snapshot(self, second=False):
+        examples = Path(__file__).resolve().parents[1] / "examples"
+        pgn = (examples / ("second-game.pgn" if second else "game.pgn")).read_text(encoding="utf-8")
+        review = json.loads((examples / ("second-review.json" if second else "first-review.json"))
+                            .read_text(encoding="utf-8"))
+        card = build_training_card(parse_pgn(pgn), review["source_ply_count"],
+                                   continuation_san=review["continuation_san"],
+                                   explanation=review["explanation"])
+        score = EngineEvaluation(0, None, 0)
+        comparison = MoveComparison(card.position_fen, card.played_move_san,
+                                    card.played_move_san, score, score, 0)
+        with patch("chess_coach.workflow.analyze_player_moves", return_value=[comparison]):
+            report = analyze_pgn(Mock(id={"name": "Test engine"}), pgn,
+                                 "black" if second else "white")
+        return review_candidate(report, review)
+
+    def test_loads_both_example_reviews_with_source_and_version_labels(self):
+        for second in (False, True):
+            with self.subTest(second=second):
+                snapshot = self.snapshot(second)
+                self.path.write_text(json.dumps(snapshot), encoding="utf-8")
+                client = create_app_from_review(str(self.path)).test_client()
+                initial = client.get("/api/position").get_json()
+                reveal = client.get("/api/reveal").get_json()
+                self.assertEqual(initial["fen"], snapshot["card"]["position_fen"])
+                self.assertEqual(reveal["explanation"], snapshot["card"]["explanation"])
+                replay = client.post("/api/position", json={
+                    "card_id": initial["card_id"], "moves": reveal["moves"]})
+                self.assertEqual(replay.get_json()["sans"], list(snapshot["card"]["continuation_san"]))
+                page = client.get("/").get_data(as_text=True)
+                self.assertIn(f"source {snapshot['source']['id'][:12]}", page)
+                self.assertIn(f"review {snapshot['version_id'][:12]}", page)
+
+    def test_accepts_file_at_exact_byte_limit(self):
+        content = json.dumps(self.snapshot(), ensure_ascii=False).encode("utf-8")
+        self.path.write_bytes(content)
+        with patch("chess_coach.web.MAX_REVIEW_BYTES", len(content), create=True):
+            client = create_app_from_review(str(self.path)).test_client()
+            self.assertEqual(client.get("/api/position").status_code, 200)
+
+    def test_rejects_oversized_file_instead_of_accepting_valid_prefix(self):
+        content = json.dumps(self.snapshot()).encode("utf-8")
+        self.assertLess(len(content), 8192)
+        self.path.write_bytes(content.ljust(8192) + b"invalid trailing content")
+        with patch("chess_coach.web.MAX_REVIEW_BYTES", 8192, create=True):
+            with self.assertRaisesRegex(ValueError, "exceeds"):
+                create_app_from_review(str(self.path))
+
+    def test_invalid_files_fail_before_app_creation(self):
+        changed = self.snapshot()
+        changed["card"]["explanation"] = "Unreviewed change"
+        rejected = self.snapshot()
+        rejected["review"]["decision"] = "reject"
+        rejected["card"] = None
+        for content in (b"{", b"\xff", b"null", json.dumps(changed).encode(),
+                        json.dumps(rejected).encode()):
+            with self.subTest(content=content[:30]):
+                self.path.write_bytes(content)
+                with patch("chess_coach.web.create_app") as factory:
+                    with self.assertRaises(ValueError):
+                        create_app_from_review(str(self.path))
+                    factory.assert_not_called()
+
+    def test_missing_file_does_not_fall_back_to_default_card(self):
+        with patch("chess_coach.web.create_app") as factory:
+            with self.assertRaises(FileNotFoundError):
+                create_app_from_review(str(self.path))
+            factory.assert_not_called()

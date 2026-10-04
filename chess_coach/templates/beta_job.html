@@ -1,0 +1,12 @@
+{% extends 'beta_base.html' %}
+{% block body %}
+<section class="intro"><p class="eyebrow">Your game → Your practice</p><h1>Game analysis</h1></section>
+<section class="panel analysis-card"><div class="analysis-game">{% if thumbnail %}<img class="board-thumbnail" src="{{ thumbnail }}" width="128" height="128" alt="Selected game board preview">{% endif %}<div><h2>{{ game.player }} <span class="note">vs</span> {{ game.opponent }}</h2><p class="note">{{ game.date }} · {{ game.color|capitalize }} · {{ game.result }}</p></div></div>
+<div class="analysis-state"><p id="job-status" role="status" aria-live="polite" {% if job.status in ('queued','running') %}data-poll="{{ url_for('job_status',jid=job.id) }}"{% endif %}>{{ {'queued':'Queued','running':'Analyzing','failed':'Analysis could not finish'}.get(job.status,'Ready' if items else 'No suitable positions') }}</p>
+{% if job.status in ('queued','running') %}<div class="analysis-activity" aria-hidden="true"></div><p>Preparing practice from your game. You can leave this page and return from Games.</p>
+{% elif job.status == 'failed' %}<p>{{ job.error }}</p><p class="note">Return to Games to choose your next step.</p>
+{% elif items %}<p>{{ items|length }} {{ 'position' if items|length == 1 else 'positions' }} ready · {{ practiced }} practiced</p><div class="result-actions"><a href="{{ url_for('puzzles') }}#{{ game.anchor }}">View in Puzzles</a></div>
+{% else %}<p>No suitable practice positions found under the current conservative filters.</p><p class="note">Try another game; an analysis does not always produce practice positions.</p>{% endif %}</div>
+{% if items %}{% with position_numbers=true %}{% include '_position_cards.html' %}{% endwith %}<p class="note">Engine-selected examples; other legal ideas are welcome.</p>{% endif %}
+<a href="{{ url_for('home') }}">← Back to games</a></section>
+{% endblock %}

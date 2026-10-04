@@ -6,9 +6,12 @@ from hashlib import sha256
 import json
 from pathlib import Path
 import re
+import ssl
 import time
 from urllib.error import HTTPError, URLError
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
+
+import certifi
 
 from chess_coach.workflow import validated_game
 
@@ -20,9 +23,10 @@ LOSS_RESULTS = {"checkmated", "timeout", "resigned", "lose", "abandoned"}
 
 
 class ApiError(RuntimeError):
-    def __init__(self, message, *, status=None):
+    def __init__(self, message, *, status=None, kind=None):
         super().__init__(message)
         self.status = status
+        self.kind = kind
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -31,7 +35,10 @@ class _NoRedirect(HTTPRedirectHandler):
 
 
 def _request(url, headers):
-    opener = build_opener(_NoRedirect())
+    # Python.org macOS installs may lack a configured system CA bundle.
+    # Use the packaged trust roots while keeping hostname/certificate checks on.
+    context = ssl.create_default_context(cafile=certifi.where())
+    opener = build_opener(_NoRedirect(), HTTPSHandler(context=context))
     try:
         with opener.open(Request(url, headers=headers), timeout=15) as response:
             body = response.read(MAX_RESPONSE_BYTES + 1)
@@ -42,7 +49,9 @@ def _request(url, headers):
         finally:
             error.close()
     except (URLError, OSError) as error:
-        raise ApiError(f"Chess.com request failed: {error}") from error
+        reason = getattr(error, 'reason', error)
+        kind = 'tls' if isinstance(reason, ssl.SSLCertVerificationError) else 'connection'
+        raise ApiError(f"Chess.com request failed: {error}", kind=kind) from error
 
 
 class ChessComClient:
@@ -136,11 +145,11 @@ def _date(timestamp):
     return datetime.fromtimestamp(timestamp, timezone.utc).date().isoformat()
 
 
-def _eligible_game(raw, username, start, end):
+def _eligible_game(raw, username, start, end, *, rapid_only=True):
     """None means intentionally out of scope; ValueError means incomplete/bad data."""
     if not isinstance(raw, dict):
         raise ValueError("Invalid game record")
-    if raw.get("rated") is not True or raw.get("rules") != "chess" or raw.get("time_class") != "rapid":
+    if raw.get("rules") != "chess" or (rapid_only and (raw.get("rated") is not True or raw.get("time_class") != "rapid")):
         return None
     finished = raw.get("end_time")
     if type(finished) is not int:
@@ -179,6 +188,7 @@ def _eligible_game(raw, username, start, end):
     rating = player.get("rating")
     return {"id": sha256(url.encode()).hexdigest(), "url": url, "pgn": pgn,
             "color": color, "end_time": finished, "result": outcome,
+            "time_class": raw.get("time_class"), "rated": raw.get("rated") is True,
             "result_code": result_code,
             "rating": rating if type(rating) is int else None,
             "opponent": raw.get("black" if color == "white" else "white", {}).get("username")}
@@ -280,3 +290,71 @@ def import_history(client: ChessComClient, username: str, *, now=None, refresh=F
         "games": games, "suggested_game_ids": [g["id"] for g in games[:5]],
         "warnings": warnings,
     }
+
+
+def browse_archive(client: ChessComClient, username: str, *, month=None, page=1,
+                   time_class='all', result='all', now=None) -> dict:
+    """Browse one public archive month; validate at most 50 games per page.
+
+    Archive browsing is independent of the recent rapid sample. All completed
+    standard time controls (rated or casual) are eligible, never variants.
+    """
+    username = username.strip().casefold()
+    if not re.fullmatch(r'[a-z0-9_-]{1,50}', username):
+        raise ValueError('Enter a Chess.com username, not a URL')
+    if type(page) is not int or page < 1 or page > 400:
+        raise ValueError('Invalid archive page')
+    if time_class not in ('all','rapid','blitz','bullet','daily'):
+        raise ValueError('Invalid time-control filter')
+    if result not in ('all','win','loss','draw'):
+        raise ValueError('Invalid result filter')
+    if month is not None and not re.fullmatch(r'\d{4}-(?:0[1-9]|1[0-2])', month):
+        raise ValueError('Choose an archive month')
+    now = int(time.time() if now is None else now)
+    base = API + username
+    index = client.get(base + '/games/archives').get('archives')
+    if not isinstance(index, list) or len(index) > 2400:
+        raise ApiError('Chess.com archive index is missing or too large')
+    months = sorted({match[1].replace('/','-') for url in index if isinstance(url,str)
+                     and (match := re.fullmatch(re.escape(base) + r'/games/(\d{4}/(?:0[1-9]|1[0-2]))',url))
+                     and match[1].replace('/','-') <= _date(now)[:7]}, reverse=True)
+    month = month or (months[0] if months else None)
+    if month is not None and month not in months:
+        raise ValueError('That month is not available in this player’s archive')
+    records = client.get(base + '/games/' + month.replace('-','/')).get('games') if month else []
+    if not isinstance(records,list) or len(records) > 20_000:
+        raise ApiError('Monthly archive is missing or exceeds 20,000 records')
+    # Cheap metadata selection before PGN replay keeps each browser page bounded.
+    selected = {}
+    for raw in records:
+        if (isinstance(raw,dict) and raw.get('rules') == 'chess'
+                and raw.get('time_class') in ('rapid','blitz','bullet','daily')
+                and (time_class == 'all' or raw.get('time_class') == time_class)
+                and type(raw.get('end_time')) is int and 0 <= raw['end_time'] <= now
+                and _date(raw['end_time'])[:7] == month
+                and isinstance(raw.get('url'),str)):
+            if result != 'all':
+                players = [raw.get(color,{}) for color in ('white','black')
+                           if isinstance(raw.get(color),dict)
+                           and str(raw[color].get('username','')).casefold() == username]
+                code = players[0].get('result') if len(players) == 1 else None
+                outcome = 'win' if code == 'win' else 'draw' if code in DRAW_RESULTS else 'loss' if code in LOSS_RESULTS else None
+                if outcome != result:
+                    continue
+            selected.setdefault(raw['url'],raw)
+    ordered = sorted(selected.values(),key=lambda raw:(-raw['end_time'],raw['url']))
+    pages = max(1,(len(ordered)+49)//50)
+    if page > pages:
+        raise ValueError('That archive page is not available')
+    games=[];invalid=0
+    for raw in ordered[(page-1)*50:page*50]:
+        try:
+            game = _eligible_game(raw,username,0,now, rapid_only=False)
+            if game is not None:
+                games.append(game)
+        except (ValueError,TypeError,AttributeError):
+            invalid += 1
+    return {'schema_version':1,'username':username,'requested_at':now,'games':games,
+            'archive':{'month':month,'months':months,'page':page,'pages':pages,
+                       'total':len(ordered),'time_class':time_class,'result':result},
+            'warnings':[f'Skipped {invalid} incomplete or invalid records on this page'] if invalid else []}

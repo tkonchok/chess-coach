@@ -1,12 +1,13 @@
 import copy
 import unittest
+import json
 from unittest.mock import Mock, patch
 
 import chess
 
 from chess_coach.analysis import EngineEvaluation, MoveComparison
 from chess_coach.pgn import board_after_ply, parse_pgn
-from chess_coach.workflow import analyze_pgn, review_candidate
+from chess_coach.workflow import analyze_pgn, review_candidate, card_from_review
 
 
 PGN = '[White "Learner"]\n[Black "Opponent"]\n\n1. e4 e5 2. Nf3 Nc6 *'
@@ -54,6 +55,77 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(result["source"], report["source"])
         self.assertEqual(result["engine"], report["engine"])
         self.assertEqual(report, original)
+        # Simulate saving to JSON and loading it again.
+        saved_snapshot = json.loads(json.dumps(result))
+
+        card = card_from_review(saved_snapshot)
+
+        self.assertEqual(card.source_ply_count, 2)
+        self.assertEqual(
+            card.position_fen,
+            result["card"]["position_fen"],
+        )
+        self.assertEqual(card.continuation_san, ("Nf3", "Nc6"))
+        self.assertEqual(card.explanation, review["explanation"])
+
+    def accepted_snapshot(self):
+        return review_candidate(self.report(), {
+            "decision": "accept", "source_ply_count": 2,
+            "reason": "A development example.", "alternatives": "Bc4 also develops.",
+            "continuation_san": ["Nf3", "Nc6"], "explanation": "Develop pieces.",
+        })
+
+    def test_card_loader_preserves_input_and_restores_tuple_after_json(self):
+        snapshot = self.accepted_snapshot()
+        for saved in (snapshot, json.loads(json.dumps(snapshot))):
+            original = copy.deepcopy(saved)
+            card = card_from_review(saved)
+            self.assertEqual(card.continuation_san, ("Nf3", "Nc6"))
+            self.assertEqual(saved, original)
+
+    def test_card_loader_rejects_rejected_review(self):
+        snapshot = review_candidate(self.report(), {
+            "decision": "reject", "source_ply_count": 2, "reason": "Skip this one.",
+        })
+        with self.assertRaisesRegex(ValueError, "accepted"):
+            card_from_review(snapshot)
+
+    def test_card_loader_rejects_changed_digest(self):
+        snapshot = self.accepted_snapshot()
+        snapshot["card"]["explanation"] = "An unreviewed change."
+        with self.assertRaisesRegex(ValueError, "digest"):
+            card_from_review(snapshot)
+
+    def test_card_loader_checks_content_even_with_recomputed_digest(self):
+        from hashlib import sha256
+
+        for target, field, value in (
+            ("source", "pgn", PGN + " "),
+            ("source", "headers", {}),
+            ("candidate", "position_fen", chess.STARTING_FEN),
+            ("card", "position_fen", chess.STARTING_FEN),
+            ("card", "explanation", "Different from the reviewed explanation."),
+            ("review", "continuation_san", ["e5"]),
+        ):
+            with self.subTest(target=target, field=field):
+                snapshot = self.accepted_snapshot()
+                snapshot[target][field] = value
+                payload = {k: v for k, v in snapshot.items() if k != "version_id"}
+                snapshot["version_id"] = sha256(
+                    json.dumps(payload, sort_keys=True).encode("utf-8")
+                ).hexdigest()
+                with self.assertRaises(ValueError):
+                    card_from_review(snapshot)
+
+    def test_card_loader_rejects_missing_fields_and_unsupported_format(self):
+        snapshot = self.accepted_snapshot()
+        cases = [None, [], {}, snapshot | {"schema_version": 2},
+                 snapshot | {"schema_version": True}]
+        cases.extend({k: v for k, v in snapshot.items() if k != missing}
+                     for missing in snapshot)
+        for index, invalid in enumerate(cases):
+            with self.subTest(case=index), self.assertRaises(ValueError):
+                card_from_review(invalid)
 
     def test_rejection_requires_reason_but_not_a_card(self):
         result = review_candidate(self.report(), {

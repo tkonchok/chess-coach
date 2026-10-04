@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Chess Coach{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static',filename='practice.css') }}">
+  <script src="{{ url_for('static',filename='beta.js') }}" defer></script>
+</head>
+<body><main>
+  {% include '_beta_header.html' %}
+  {% block body %}{% endblock %}
+  <footer>Public beta preparation · Completed games only · No automatic move grading or rating guarantees.</footer>
+</main></body></html>

@@ -1,0 +1,17 @@
+.git
+.venv
+.env
+instance
+generated
+__pycache__
+test-results
+AGENTS.md
+.agents
+.codex
+.DS_Store
+tests
+docs
+.github
+.env.*
+*.sqlite3*
+*.mp4

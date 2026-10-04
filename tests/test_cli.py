@@ -44,7 +44,7 @@ class CliTests(unittest.TestCase):
 
     def test_shared_deadline_stops_before_next_search(self):
         engine = Mock()
-        with patch("chess_coach.__main__.time.monotonic", side_effect=[100, 101, 106]):
+        with patch("chess_coach.engine.time.monotonic", side_effect=[100, 101, 106]):
             budgeted = _BudgetedEngine(engine, 5)
             budgeted.analyse("board", "limit")
             self.assertEqual(engine.timeout, 4)

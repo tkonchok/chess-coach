@@ -1,0 +1,11 @@
+{% extends 'beta_base.html' %}
+{% block body %}<section class="panel"><h1>Saved practice</h1><p>{{ attempt.completed|utcdate }}</p>
+<dl><dt>Your proposed move</dt><dd>{{ proposed_move_san }}</dd>
+<dt>Original-game reflection (your report)</dt><dd>{{ attempt.payload.original_choice|replace('_',' ') if attempt.payload.original_choice else 'Unanswered' }}</dd>
+<dt>Original-game note{% if attempt.payload.dont_remember %} · unconfirmed draft, not remembered reasoning{% endif %}</dt><dd>{{ attempt.payload.original_reasoning or 'Unanswered' }}</dd>
+<dt>New-attempt note</dt><dd>{{ attempt.payload.practice_reasoning or 'Unanswered' }}</dd>
+<dt>Takeaway</dt><dd>{{ attempt.payload.takeaway or 'Unanswered' }}</dd></dl>
+<p><a href="{{ url_for('practice',version=attempt.version) }}">Open original exercise / Try again</a> · <a href="{{ url_for('reflections') }}">Back to reflections</a></p>
+<form method="post" action="{{ url_for('delete',submission=attempt.submission) }}"><input type="hidden" name="csrf" value="{{ csrf_token }}"><label><input name="confirm" value="yes" type="checkbox" required> Delete this saved attempt and its notes</label><button class="secondary">Delete attempt</button></form>
+<p class="note">Other attempts and their exercises stay intact. Deletion does not remove previously created backups.</p>
+</section>{% endblock %}

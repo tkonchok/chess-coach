@@ -1,0 +1,17 @@
+Chess Coach
+Copyright (C) 2026 Chess Coach contributors
+
+This project is licensed under GNU GPL version 3 or, at your option, any later
+version. See LICENSE. Distributed without warranty.
+
+The chess Python library and its generated SVG pieces are by Niklas Fiekas
+and contributors, licensed GPL-3.0-or-later. Its notices are retained in the
+installed package. https://github.com/niklasf/python-chess
+
+Stockfish is by the Stockfish developers and contributors, licensed GPL-3.0.
+The Docker image retains Debian's copyright notice, exact package version,
+and corresponding source archives under /app/notices/stockfish.
+https://github.com/official-stockfish/Stockfish
+
+Other dependencies retain their own licenses in their installed distributions.
+See docs/DEPENDENCIES.md for the inventory and pending distribution checks.

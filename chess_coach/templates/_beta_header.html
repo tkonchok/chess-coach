@@ -1,0 +1,12 @@
+<header class="app-header">
+  <a class="brand" href="{{ url_for('home') }}"><span class="brand-mark" aria-hidden="true">♞</span><span>Chess Coach</span><span class="badge">Beta</span></a>
+  {% if signed_in %}
+  <nav class="app-nav" aria-label="Main navigation">
+    <a href="{{ url_for('home') }}" {% if request.endpoint in ('home','job_page') %}aria-current="page"{% endif %}>Games</a>
+    {% if version_id %}<span class="nav-current" aria-current="page">Practice</span>{% endif %}
+    <a href="{{ url_for('puzzles') }}" {% if request.endpoint in ('puzzles',) %}aria-current="page"{% endif %}>Puzzles</a>
+    <a href="{{ url_for('reflections') }}" {% if request.endpoint in ('reflections','history','attempt_detail') %}aria-current="page"{% endif %}>Reflections</a>
+  </nav>
+  <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button class="secondary compact">Sign out</button></form>
+  {% else %}<span class="header-note">Your games. Your practice.</span>{% endif %}
+</header>

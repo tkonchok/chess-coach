@@ -3,16 +3,16 @@
 import argparse
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import sys
-import time
 
 import chess.engine
 
 from chess_coach.chesscom import ChessComClient, import_history
 from chess_coach.presentation import render_training_card
 from chess_coach.training import TrainingCard
-from chess_coach.workflow import MAX_PGN_BYTES, analyze_pgn, review_candidate, validated_game
+from chess_coach.workflow import MAX_PGN_BYTES, review_candidate, validated_game
 
 
 MAX_JSON_BYTES = 25_000_000
@@ -34,45 +34,12 @@ def write_json(path, data):
         handle.write("\n")
 
 
-class _BudgetedEngine:
-    """Apply a shared wall-clock budget without changing domain comparison code."""
-
-    def __init__(self, engine, seconds):
-        self.engine = engine
-        self.deadline = time.monotonic() + seconds
-        self.id = engine.id
-
-    def analyse(self, *args, **kwargs):
-        remaining = self.deadline - time.monotonic()
-        if remaining <= 0:
-            raise TimeoutError("Game analysis exceeded its time budget")
-        self.engine.timeout = min(30, remaining)
-        return self.engine.analyse(*args, **kwargs)
-
-
-def run_analysis(pgn, color, *, engine_path="stockfish", nodes=100_000, seconds=120):
-    validated_game(pgn)  # Reject bad input before creating an external process.
-    if color not in ("white", "black") or not 1 <= nodes <= 5_000_000 or not 1 <= seconds <= 600:
-        raise ValueError("Choose white/black, 1–5,000,000 nodes and 1–600 seconds")
-    engine = chess.engine.SimpleEngine.popen_uci(engine_path, timeout=10)
-    try:
-        settings = {"Threads": 1, "Hash": 16}
-        engine.configure(settings)
-        report = analyze_pgn(_BudgetedEngine(engine, seconds), pgn, color, nodes=nodes)
-        report["engine"].update(options=settings, max_analysis_seconds=seconds,
-                                executable=engine_path)
-        return report
-    finally:
-        # Graceful shutdown is bounded too; close the transport even if quit fails.
-        engine.timeout = 5
-        try:
-            engine.quit()
-        finally:
-            engine.close()
+# Re-exported for compatibility with existing CLI callers and tests.
+from chess_coach.engine import _BudgetedEngine, run_analysis
 
 
 def _analysis_arguments(parser):
-    parser.add_argument("--engine", default="stockfish", help="Stockfish executable path")
+    parser.add_argument("--engine", default=os.environ.get("STOCKFISH_PATH", "stockfish"), help="Stockfish executable path")
     parser.add_argument("--nodes", type=int, default=100_000, help="Node budget per search")
     parser.add_argument("--seconds", type=int, default=120, help="Total analysis budget (1–600 seconds)")
     parser.add_argument("--output", type=Path, required=True, help="New JSON report path")
