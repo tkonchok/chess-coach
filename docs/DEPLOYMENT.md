@@ -1,6 +1,6 @@
-# Deployment runbook — not yet performed
+# Deployment runbook
 
-Do not publish until the teaching-quality gate, live identity checks and clean-container workflow pass. Purchases and deployment require the owner's explicit authorization. The $10–15 monthly target is a budget estimate, not measured usage.
+Source publication and Railway trial deployment are owner-authorized. Local container verification and the six-position engine-fact review passed; live identity and deployed workflow checks remain pending. The $10–15 monthly target is a budget estimate, not measured usage.
 
 ## Local container check
 
@@ -16,13 +16,13 @@ Create an ignored `.env.docker` with `APP_ORIGIN=http://127.0.0.1:8080`, `LOCAL_
 
 ## Railway — owner-authorized trial deployment
 
-1. Create one application service from the Dockerfile and one persistent volume mounted at `/data`. Keep one replica, one Gunicorn worker and eight threads; do not enable preloading. Health path is `/health`. Stockfish is installed in the image at `/usr/games/stockfish`.
+1. Create one GitHub application service from `main`, using the detected Dockerfile, and one persistent volume mounted at `/data`. In service Settings enable **Wait for CI**, keep one replica, set health path `/health` with 60-second timeout, and set On Failure restart policy with three retries. Keep Serverless off. The image starts one Gunicorn worker and eight threads without preloading; leave the start-command override empty. Stockfish is `/usr/games/stockfish`. New Railway services cannot use the deprecated `railway.toml` configuration; these settings are applied in the dashboard. See [Railway configuration notice](https://docs.railway.com/config-as-code).
 2. Generate the Railway HTTPS address. Set `APP_ORIGIN` to that exact origin without trailing path, `DATABASE=/data/chess-coach.sqlite3`, and a persistent random `SECRET_KEY` of at least 32 characters. Generate locally using `python3 -c "import secrets; print(secrets.token_hex(32))"`; enter it privately in platform variables. Never commit it.
-3. Set `LOCAL_DEMO=0` and `LOCAL_TESTING=0`. Set `AUTOMATIC_EXERCISES_ENABLED=0` until the documented teaching review passes. Enter `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, leave `GROQ_API_KEY` unset for the engine-only public release, and set `WALKTHROUGH_AI_ENABLED=0` privately as environment variables.
+3. Set `LOCAL_DEMO=0` and `LOCAL_TESTING=0`. Set `AUTOMATIC_EXERCISES_ENABLED=1` for the reviewed engine-fact beta. Enter `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, leave `GROQ_API_KEY` unset for the engine-only public release, and set `WALKTHROUGH_AI_ENABLED=0` privately as environment variables.
 4. Configure a Google OAuth web client and consent screen/test users. Authorized callback must exactly equal `APP_ORIGIN/auth/google/callback`. Verify login, callback failure, logout and two real Google accounts. Do not assume the mocked callback test proves provider integration.
-5. Verify volume ownership before accepting traffic. Railway documents root-mounted volumes and `RAILWAY_RUN_UID=0` for images with a non-root user. This is a platform configuration tradeoff requiring a clean smoke check; the image itself defaults to user `coach`. See [Railway volume permissions](https://docs.railway.com/volumes).
+5. Verify volume ownership before accepting traffic. Railway documents root-mounted volumes and `RAILWAY_RUN_UID=0` for images with a non-root user. Running as root weakens the container privilege boundary and requires explicit owner approval plus a clean smoke check; the image itself defaults to user `coach`. See [Railway volume permissions](https://docs.railway.com/volumes).
 6. Configure compute usage alerts and an owner-approved hard spending cap before publication. Hard caps can take workloads offline. Review all workspace projects because hosting another project contributes to the budget. See [Railway cost controls](https://docs.railway.com/pricing/cost-control). Measure actual CPU, RAM, storage and analysis duration before calling the estimate reliable.
-7. Verify `/health`, username import, analysis, practice, engine-fact coaching, retry-safe save, history, deletion, account isolation and restart persistence on the deployed address. Record date, build and outcomes in the validation log. Only then enable automatic exercises after their separate quality approval.
+7. Verify `/health`, username import, analysis, practice, engine-fact coaching, retry-safe save, history, deletion, account isolation and restart persistence on the deployed address. Record date, build and outcomes in the validation log. Only after these checks add the live URL to portfolio materials.
 
 The app disables Gunicorn access logging and never logs request bodies or note content. Platform proxy logging should also be reviewed. Existing SQLite data and backups include private notes; restrict access and never upload them to a public repository.
 
@@ -44,3 +44,7 @@ Missing Stockfish fails the job without a partial exercise. An interrupted runni
 ## Walkthrough commentary gate
 
 Keep `WALKTHROUGH_AI_ENABLED=0` in public hosting until six-position teaching-quality acceptance. `LOCAL_TESTING=1` permits local preview only and is prohibited on public origins. Walkthroughs remain available with board-fact commentary when Groq is unavailable, quota limited, or invalid. One prepared bundle consumes an exploration allowance (including cached preparation); one uncached AI bundle consumes an AI allowance. Budget provider capacity as well as request counts: [Groq rate limits](https://console.groq.com/docs/rate-limits) apply to tokens per minute and the provider account. No automatic retry loop is introduced.
+
+## Current trial setup
+
+The owner authorized the repository-scoped Railway GitHub App. One service and its `/data` volume are staged in US East. The generated address is `https://chess-coach-production-a492.up.railway.app`; it is not yet a verified live demo. Production credentials, mounted-volume permission approval, deployed smoke checks and account-level cost controls remain pending. No paid upgrade or additional service has been purchased.

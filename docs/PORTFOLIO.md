@@ -24,7 +24,7 @@ For history I chose immutable exercise snapshots. Each attempt references exactl
 
 I worked through the product scope and implementation with AI assistance. I can explain the comparison logic, snapshot design, privacy boundary and failure handling. We checked known score cases, real engine replay, browser interactions with two real games, retry behavior, account isolation and backup restore.
 
-The local workflow is working. Live Google and Groq integration, six-position teaching review, container verification and hosting are the remaining release gates. I am not claiming proven chess improvement. After deployment, I plan to use measured demand to guide maintenance and scaling.”
+The local workflow is working. The public repository has passing CI, and container verification plus six engine-fact positions across both colors passed. Live hosted Google sign-in and the deployed workflow are still pending. AI commentary stays disabled until its separate review passes. I am not claiming proven chess improvement. After deployment, I plan to use measured demand to guide maintenance and scaling.”
 
 ## Walkthrough addition
 
